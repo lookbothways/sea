@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patch launch windows</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=Roboto:wght@100&display=swap" rel="stylesheet">
+<style>
+/* Palette borrowed from Admiralty charts: buff land, shallow-water blue, magenta marks. */
+:root{
+  --paper:#FFFFFF; --ink:#16252E; --muted:#5C6B73; --rule:#D5DAD6;
+  --day:#F4EBC2; --night:#C5CED4;
+  --water:#B4D5E7; --water-line:#2F6F97;
+  --mark:#A3238E;
+  --go:#22764A; --maybe:#A86A0C; --strong:#B4483C;
+}
+*{box-sizing:border-box}
+html{background:var(--paper)}
+body{
+  margin:0 auto; padding:1.5rem 1rem 3rem; max-width:54rem;
+  background:var(--paper); color:var(--ink);
+  font:400 1rem/1.45 "IBM Plex Sans Condensed","Arial Narrow",Arial,sans-serif;
+  font-variant-numeric:tabular-nums;
+}
+.place{margin:0; color:var(--muted)}
+h1{
+  margin:.2rem 0 .4rem;
+  font:100 clamp(2rem,6.5vw,3.6rem)/1.1 Roboto,"Helvetica Neue",Arial,sans-serif;
+  letter-spacing:-.01em;
+}
+h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
+.sub{margin:0; font-size:1.15rem; max-width:40rem}
+.river{margin:.5rem 0 0; color:var(--muted)}
+
+.day{margin-top:2rem}
+.day h2{margin:0; font:600 1.1rem/1.3 inherit}
+.day h2 span{font-weight:400; color:var(--muted); margin-left:.6rem}
+.track{
+  position:relative; height:92px; margin-top:.4rem;
+  background:var(--day); border-radius:3px; overflow:hidden;
+}
+.night{position:absolute; top:0; bottom:0; background:var(--night)}
+.tide{position:absolute; inset:0; width:100%; height:100%}
+.tide .area{fill:var(--water); opacity:.85}
+.tide .line{fill:none; stroke:var(--water-line); stroke-width:1.5; vector-effect:non-scaling-stroke}
+.win{position:absolute; top:0; bottom:0; border:solid; border-width:0 2px}
+.win.go{background:color-mix(in srgb,var(--go) 32%,transparent); border-color:var(--go)}
+.win.maybe{
+  background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--maybe) 38%,transparent) 0 6px,transparent 6px 12px);
+  border-color:var(--maybe);
+}
+.win.no{border:1px dashed var(--muted); opacity:.55}
+.ev{
+  position:absolute; transform:translateX(-50%); padding:0 .2rem;
+  font-size:.78rem; line-height:1.2; white-space:nowrap;
+}
+.ev.hw{top:2px} .ev.lw{bottom:2px; font-weight:600}
+.now{position:absolute; top:0; bottom:0; width:2px; background:var(--mark)}
+
+.wind{display:grid; grid-template-columns:repeat(8,1fr); gap:1px; margin-top:2px}
+.w{padding:.15rem 0; text-align:center; font-size:.85rem; border-radius:2px; color:var(--muted)}
+.w.ok{background:color-mix(in srgb,var(--go) 16%,transparent); color:var(--ink)}
+.w.strong{background:color-mix(in srgb,var(--strong) 24%,transparent); color:var(--ink)}
+.w i{display:inline-block; font-style:normal; margin-left:.15rem}
+.axis{display:flex; justify-content:space-between; font-size:.75rem; color:var(--muted)}
+
+.wins{list-style:none; margin:.5rem 0 0; padding:0}
+.wins li{padding:.25rem 0 .25rem .9rem; border-left:3px solid var(--rule); margin-top:.3rem}
+.wins li.go{border-color:var(--go)} .wins li.maybe{border-color:var(--maybe)}
+.wins li.no{color:var(--muted)}
+.wins b{font-weight:600}
+.wins li.go b{color:var(--go)} .wins li.maybe b{color:var(--maybe)}
+
+.rain{display:block; width:100%; aspect-ratio:16/9; margin-top:2.5rem; border:1px solid var(--rule); border-radius:3px}
+details{margin-top:2.5rem; border-top:1px solid var(--rule); padding-top:1rem}
+summary{cursor:pointer; font-weight:600}
+.fields{display:grid; grid-template-columns:repeat(auto-fit,minmax(13rem,1fr)); gap:.8rem 1.2rem; margin-top:1rem}
+label{display:block; font-size:.92rem}
+input{
+  display:block; width:6rem; margin-top:.2rem; padding:.3rem .4rem;
+  font:inherit; color:inherit; background:transparent;
+  border:1px solid var(--muted); border-radius:3px;
+}
+button{
+  margin-top:1rem; padding:.35rem .8rem; font:inherit; color:inherit;
+  background:transparent; border:1px solid var(--muted); border-radius:3px; cursor:pointer;
+}
+:focus-visible{outline:2px solid var(--mark); outline-offset:2px}
+footer{margin-top:2rem; color:var(--muted); font-size:.9rem; max-width:44rem}
+footer p{margin:.4rem 0}
+.ukho{font:12px/1.3 Arial,sans-serif; color:var(--ink)}
+</style>
+</head>
+<body>
+
+<header>
+  <p class="place">Patch, Teifi estuary</p>
+  <h1 id="hero">Checking wind and tide</h1>
+  <p class="sub" id="heroSub"></p>
+  <p class="river" id="river"></p>
+</header>
+
+<main id="days"></main>
+
+<iframe class="rain" src="https://lookbothways.github.io/cardigan-weather/?place=cardigan" title="Cardigan rainfall" loading="lazy"></iframe>
+
+<details>
+  <summary>Your limits and timings</summary>
+  <div class="fields">
+    <label>Lightest wind worth going, knots <input type="number" id="windMin" min="0" max="20"></label>
+    <label>Strongest steady wind, knots <input type="number" id="windMax" min="5" max="30"></label>
+    <label>Strongest gust, knots <input type="number" id="gustMax" min="5" max="40"></label>
+    <label>Launch this long before low water, minutes <input type="number" id="lead" min="0" max="300" step="15"></label>
+    <label>Be back this long after low water, minutes <input type="number" id="ret" min="30" max="360" step="15"></label>
+    <label>The tide turns at Patch this much later than predicted, minutes <input type="number" id="offset" min="-120" max="180" step="5"></label>
+  </div>
+  <button id="reset" type="button">Reset to defaults</button>
+</details>
+
+<footer>
+  <p id="tideSource"></p>
+  <p>Wind, rain, daylight and river flow from Open-Meteo. Solid green is inside your limits, hatched amber is marginal.</p>
+  <p>This is a planning aid. The ebb at Patch runs out over the bar to open sea, so look at the water and the wind before you launch.</p>
+</footer>
+
+<script>
+(() => {
+'use strict';
+
+const LAT = 52.104699, LON = -4.681918;      // Patch
+const RIVER = { lat: 52.06, lon: -4.60 };    // Teifi near Llechryd, for river flow
+const SEAWARD = 320;                         // bearing the ebb runs out on
+const HIGH_FLOW = 45;                        // m3/s, roughly 1.5x the Teifi's average
+const TZ = 'Europe/London';
+const MIN = 60000;
+const DEFAULTS = { windMin: 4, windMax: 14, gustMax: 20, lead: 90, ret: 120, offset: 0 };
+const STORE = 'patch-launch';
+
+const S = Object.assign({}, DEFAULTS, readStore());
+let hours = [], sun = {}, tide = null, river = {}, weatherError = false;
+
+function readStore() {
+  try { return JSON.parse(localStorage.getItem(STORE) || '{}'); } catch (e) { return {}; }
+}
+function writeStore() {
+  try { localStorage.setItem(STORE, JSON.stringify(S)); } catch (e) { /* settings last for this visit only */ }
+}
+
+/* ---------- time helpers (everything shown in UK local time) ---------- */
+const partsFmt = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const timeFmt = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const dayFmt = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' });
+const weekdayFmt = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, weekday: 'long' });
+
+function lp(ts) {
+  const o = {};
+  for (const p of partsFmt.formatToParts(ts)) o[p.type] = p.value;
+  return { key: `${o.year}-${o.month}-${o.day}`, mins: (+o.hour) * 60 + (+o.minute) };
+}
+const hm = ts => timeFmt.format(ts);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+const compass = d => ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(d / 22.5) % 16];
+
+async function getJSON(url) {
+  const r = await fetch(url, { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+/* ---------- data ---------- */
+async function loadWeather() {
+  const j = await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}` +
+    '&hourly=wind_speed_10m,wind_gusts_10m,wind_direction_10m,precipitation&daily=sunrise,sunset' +
+    '&wind_speed_unit=kn&timeformat=unixtime&timezone=GMT&forecast_days=7');
+  hours = j.hourly.time.map((t, i) => ({
+    t: t * 1000,
+    wind: j.hourly.wind_speed_10m[i],
+    gust: j.hourly.wind_gusts_10m[i],
+    dir: j.hourly.wind_direction_10m[i],
+    rain: j.hourly.precipitation[i] || 0
+  })).filter(h => h.wind != null);
+  sun = {};
+  j.daily.sunrise.forEach((r, i) => { sun[lp(r * 1000).key] = { rise: r * 1000, set: j.daily.sunset[i] * 1000 }; });
+}
+
+function extrema(ts, hs) {
+  const out = [];
+  for (let i = 1; i < hs.length - 1; i++) {
+    const a = hs[i - 1], b = hs[i], c = hs[i + 1];
+    if (a == null || b == null || c == null) continue;
+    const hi = b > a && b >= c, lo = b < a && b <= c;
+    if (!hi && !lo) continue;
+    const den = a - 2 * b + c, off = den ? 0.5 * (a - c) / den : 0;
+    const e = { t: ts[i] + off * (ts[i + 1] - ts[i]), type: hi ? 'HW' : 'LW', h: b - 0.25 * (a - c) * off };
+    const prev = out[out.length - 1];
+    if (prev && (prev.type === e.type || e.t - prev.t < 180 * MIN)) continue;
+    out.push(e);
+  }
+  return out;
+}
+
+async function loadTide() {
+  // 1. Admiralty predictions, written to tides.json by the GitHub Action.
+  try {
+    const j = await getJSON('tides.json');
+    const ev = (j.events || []).map(e => ({
+      t: Date.parse(/Z$|[+-]\d\d:\d\d$/.test(e.DateTime) ? e.DateTime : e.DateTime + 'Z'),
+      type: e.EventType === 'HighWater' ? 'HW' : 'LW',
+      h: typeof e.Height === 'number' ? e.Height : null
+    })).filter(e => !isNaN(e.t)).sort((a, b) => a.t - b.t);
+    if (ev.length >= 4 && ev[ev.length - 1].t > Date.now() + 24 * 60 * MIN) {
+      return { events: ev, source: 'ukho', station: j.station || 'nearest port', last: ev[ev.length - 1].t };
+    }
+  } catch (e) { /* no file yet, or stale: fall through */ }
+  // 2. Modelled sea level, no key needed.
+  const j = await getJSON(`https://marine-api.open-meteo.com/v1/marine?latitude=${LAT}&longitude=${LON}` +
+    '&hourly=sea_level_height_msl&timeformat=unixtime&timezone=GMT&forecast_days=7');
+  const ts = j.hourly.time.map(t => t * 1000);
+  return { events: extrema(ts, j.hourly.sea_level_height_msl), source: 'model' };
+}
+
+async function loadRiver() {
+  const j = await getJSON(`https://flood-api.open-meteo.com/v1/flood?latitude=${RIVER.lat}&longitude=${RIVER.lon}` +
+    '&daily=river_discharge&timeformat=unixtime&forecast_days=7');
+  river = {};
+  j.daily.time.forEach((t, i) => {
+    const v = j.daily.river_discharge[i];
+    if (v != null) river[lp(t * 1000 + 12 * 60 * MIN).key] = v;
+  });
+}
+
+/* Fill missing heights and pad each end so the curve spans whole days. */
+function prepTide(t) {
+  const fill = type => {
+    const known = t.events.filter(e => e.type === type && e.h != null).map(e => e.h);
+    const m = known.length ? mean(known) : (type === 'HW' ? 4 : 1);
+    t.events.forEach(e => { if (e.type === type && e.h == null) e.h = m; });
+    return m;
+  };
+  const m = { HW: fill('HW'), LW: fill('LW') };
+  const flip = e => (e.type === 'HW' ? 'LW' : 'HW');
+  const half = 372.5 * MIN;
+  for (let k = 0; k < 2; k++) {
+    const a = t.events[0], z = t.events[t.events.length - 1];
+    t.events.unshift({ t: a.t - half, type: flip(a), h: m[flip(a)], pad: true });
+    t.events.push({ t: z.t + half, type: flip(z), h: m[flip(z)], pad: true });
+  }
+  t.min = Math.min(...t.events.map(e => e.h));
+  t.max = Math.max(...t.events.map(e => e.h));
+  return t;
+}
+
+function tideAt(ts) {
+  const ev = tide.events;
+  for (let i = 0; i < ev.length - 1; i++) {
+    const a = ev[i], b = ev[i + 1];
+    if (ts >= a.t && ts <= b.t) {
+      const f = (ts - a.t) / (b.t - a.t);
+      return a.h + (b.h - a.h) * (1 - Math.cos(Math.PI * f)) / 2;
+    }
+  }
+  return null;
+}
+
+/* ---------- the judgement ---------- */
+function buildWindows() {
+  if (!tide || !hours.length) return [];
+  const lastHour = hours[hours.length - 1].t;
+  return tide.events.filter(e => e.type === 'LW' && !e.pad).map(e => {
+    const lw = e.t + S.offset * MIN, launch = lw - S.lead * MIN, back = lw + S.ret * MIN;
+    const key = lp(lw).key, sn = sun[key];
+    if (!sn || back > lastHour + 60 * MIN) return null;
+    const w = { lw, launch, back, key, h: e.h, reasons: [], status: 'go' };
+    w.dark = back <= sn.rise || launch >= sn.set;
+    const hrs = hours.filter(h => h.t >= launch - 30 * MIN && h.t <= back + 30 * MIN);
+    if (!hrs.length) return null;
+    w.wind = Math.round(mean(hrs.map(h => h.wind)));
+    w.gust = Math.round(Math.max(...hrs.map(h => h.gust)));
+    const rad = hrs.map(h => h.dir * Math.PI / 180);
+    w.dir = (Math.atan2(mean(rad.map(Math.sin)), mean(rad.map(Math.cos))) * 180 / Math.PI + 360) % 360;
+    w.rain = hrs.reduce((s, h) => s + h.rain, 0);
+
+    const bad = r => { w.status = 'no'; w.reasons.push(r); };
+    const warn = r => { if (w.status === 'go') w.status = 'maybe'; w.reasons.push(r); };
+    if (launch < sn.rise) bad('starts before sunrise');
+    if (back > sn.set - 30 * MIN) bad('runs into dusk');
+    if (w.wind > S.windMax) bad(`wind over your ${S.windMax} knot limit`);
+    else if (w.gust > S.gustMax) bad(`gusts over your ${S.gustMax} knot limit`);
+    else if (w.wind < S.windMin) warn('very light wind');
+    if (w.wind >= 10 && angDiff(w.dir, SEAWARD) <= 50) warn('onshore wind against the ebb, choppy towards the bar');
+    if (w.wind >= 8 && angDiff(w.dir, (SEAWARD + 180) % 360) <= 50) warn('offshore wind, so it is a beat home');
+    if (w.rain > 3) warn('wet');
+    if (river[key] > HIGH_FLOW) warn('river running high, so a stronger ebb and a later flood');
+    return w;
+  }).filter(Boolean);
+}
+
+/* ---------- drawing ---------- */
+const $ = id => document.getElementById(id);
+const pct = mins => (mins / 1440 * 100).toFixed(2) + '%';
+
+function dayName(key, now) {
+  if (key === lp(now).key) return 'today';
+  if (key === lp(now + 24 * 60 * MIN).key) return 'tomorrow';
+  return null;
+}
+
+function windText(w) { return `${compass(w.dir)} ${w.wind} knots, gusting ${w.gust}`; }
+
+function renderHero(wins, now) {
+  const h1 = $('hero'), sub = $('heroSub');
+  h1.className = '';
+  if (weatherError) {
+    h1.textContent = 'No wind forecast';
+    sub.textContent = 'The forecast did not load. Check your connection and reload the page.';
+    return;
+  }
+  if (!tide) {
+    h1.textContent = 'No tide times';
+    sub.textContent = 'Tide data did not load. Reload the page to try again.';
+    return;
+  }
+  const ahead = wins.filter(w => w.lw - 30 * MIN > now && !w.dark);
+  const pick = ahead.find(w => w.status === 'go') || ahead.find(w => w.status === 'maybe');
+  if (!pick) {
+    h1.textContent = 'No launch window this week';
+    sub.textContent = 'Every daylight low water has wind outside your limits, or runs into the dark.';
+    return;
+  }
+  const rel = dayName(pick.key, now);
+  const day = rel || weekdayFmt.format(pick.lw);
+  h1.className = pick.status;
+  if (pick.launch <= now) h1.textContent = `Launch now, low water is at ${hm(pick.lw)}`;
+  else if (pick.status === 'go') h1.textContent = `Launch ${day} at ${hm(pick.launch)}`;
+  else h1.textContent = `Marginal ${rel || 'on ' + day} at ${hm(pick.launch)}`;
+  let t = `Low water ${hm(pick.lw)}, back at Patch by ${hm(pick.back)}. ${windText(pick)}.`;
+  if (pick.reasons.length) t += ' Watch for: ' + pick.reasons.join('; ') + '.';
+  sub.textContent = t;
+}
+
+function renderRiver(now) {
+  const v = river[lp(now).key];
+  if (v == null) { $('river').textContent = ''; return; }
+  const band = v < 10 ? 'low' : v <= HIGH_FLOW ? 'typical' : v <= 80 ? 'high' : 'in spate';
+  $('river').textContent = `Teifi flow about ${Math.round(v)} m³/s today, ${band} (modelled, not gauged).`;
+}
+
+function renderDays(wins, now) {
+  if (!hours.length) { $('days').innerHTML = ''; return; }
+  // Sample the tide curve every 15 minutes and bucket by UK calendar day.
+  const curve = {};
+  if (tide) {
+    for (let ts = hours[0].t; ts <= hours[hours.length - 1].t + 60 * MIN; ts += 15 * MIN) {
+      const h = tideAt(ts); if (h == null) continue;
+      const p = lp(ts);
+      (curve[p.key] = curve[p.key] || []).push([p.mins, 90 - (h - tide.min) / ((tide.max - tide.min) || 1) * 70]);
+    }
+  }
+  const byDay = {};
+  hours.forEach(h => { const p = lp(h.t); (byDay[p.key] = byDay[p.key] || []).push(Object.assign({ mins: p.mins }, h)); });
+  const today = lp(now);
+
+  $('days').innerHTML = Object.keys(sun).sort().filter(k => k >= today.key && byDay[k]).map(key => {
+    const sn = sun[key], rise = lp(sn.rise).mins, set = lp(sn.set).mins;
+    let track = `<div class="night" style="left:0;width:${pct(rise)}"></div><div class="night" style="left:${pct(set)};right:0"></div>`;
+
+    const pts = curve[key];
+    if (pts && pts.length > 1) {
+      const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ',' + p[1].toFixed(1)).join(' ');
+      track += `<svg class="tide" viewBox="0 0 1440 100" preserveAspectRatio="none" aria-hidden="true">` +
+        `<path class="area" d="${d} L${pts[pts.length - 1][0]},100 L${pts[0][0]},100 Z"/><path class="line" d="${d}"/></svg>`;
+    }
+    const dayWins = wins.filter(w => w.key === key && !w.dark);
+    dayWins.forEach(w => {
+      const a = Math.max(0, lp(w.launch).key === key ? lp(w.launch).mins : 0);
+      const b = Math.min(1440, lp(w.back).key === key ? lp(w.back).mins : 1440);
+      track += `<div class="win ${w.status}" style="left:${pct(a)};width:${pct(b - a)}"></div>`;
+    });
+    if (tide) tide.events.filter(e => !e.pad && lp(e.t + S.offset * MIN).key === key).forEach(e => {
+      const t = e.t + S.offset * MIN, x = Math.min(1380, Math.max(60, lp(t).mins));
+      track += `<span class="ev ${e.type === 'HW' ? 'hw' : 'lw'}" style="left:${pct(x)}">${e.type === 'HW' ? 'High' : 'Low'} ${hm(t)}</span>`;
+    });
+    if (key === today.key) track += `<div class="now" style="left:${pct(today.mins)}" title="Now"></div>`;
+
+    let wind = '';
+    for (let b = 0; b < 8; b++) {
+      const hs = byDay[key].filter(h => h.mins >= b * 180 && h.mins < (b + 1) * 180);
+      if (!hs.length) { wind += '<div class="w"></div>'; continue; }
+      const sp = Math.round(mean(hs.map(h => h.wind))), g = Math.max(...hs.map(h => h.gust)), dir = hs[Math.floor(hs.length / 2)].dir;
+      const cls = sp > S.windMax || g > S.gustMax ? 'strong' : sp < S.windMin ? '' : 'ok';
+      wind += `<div class="w ${cls}" title="${compass(dir)} ${sp} knots, gusts ${Math.round(g)}">${sp}<i style="transform:rotate(${Math.round(dir + 180)}deg)">↑</i></div>`;
+    }
+
+    const label = { go: 'Good', maybe: 'Marginal', no: 'No' };
+    const list = dayWins.length ? dayWins.map(w =>
+      `<li class="${w.status}"><b>${label[w.status]}.</b> Launch ${hm(w.launch)}, low water ${hm(w.lw)}, back by ${hm(w.back)}. ` +
+      `${windText(w)}.${w.reasons.length ? ' ' + esc(w.reasons.join('; ')).replace(/^./, c => c.toUpperCase()) + '.' : ''}</li>`
+    ).join('') : '<li class="no">Low water falls in the dark.</li>';
+
+    const rel = dayName(key, now);
+    const title = dayFmt.format(sn.rise);
+    return `<section class="day"><h2>${rel ? rel[0].toUpperCase() + rel.slice(1) + ', ' : ''}${title}<span>light ${hm(sn.rise)} to ${hm(sn.set)}</span></h2>` +
+      `<div class="track">${track}</div><div class="wind" aria-label="Wind in knots, three-hour blocks">${wind}</div>` +
+      `<div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>` +
+      `<ul class="wins">${list}</ul></section>`;
+  }).join('');
+}
+
+function renderSource() {
+  const el = $('tideSource');
+  if (!tide) { el.textContent = ''; return; }
+  if (tide.source === 'ukho') {
+    el.innerHTML = `Tide times are Admiralty predictions for ${esc(tide.station)}.<br>` +
+      '<span class="ukho">Contains ADMIRALTY® tidal data:<br>© Crown Copyright and database right.</span>';
+  } else {
+    el.textContent = 'Tide times are modelled by Open-Meteo on an 8 km grid, so allow half an hour either way. ' +
+      'Add tides.json from the Admiralty API for proper predictions.';
+  }
+}
+
+function render() {
+  const now = Date.now();
+  const wins = buildWindows();
+  renderHero(wins, now);
+  renderRiver(now);
+  renderDays(wins, now);
+  renderSource();
+}
+
+async function refresh() {
+  const [w, t, r] = await Promise.allSettled([loadWeather(), loadTide(), loadRiver()]);
+  weatherError = w.status === 'rejected';
+  tide = t.status === 'fulfilled' && t.value.events.length >= 2 ? prepTide(t.value) : null;
+  if (r.status === 'rejected') river = {};
+  render();
+}
+
+/* ---------- settings ---------- */
+Object.keys(DEFAULTS).forEach(k => {
+  const el = $(k);
+  el.value = S[k];
+  el.addEventListener('change', () => {
+    const v = parseFloat(el.value);
+    S[k] = isNaN(v) ? DEFAULTS[k] : v;
+    el.value = S[k];
+    writeStore(); render();
+  });
+});
+$('reset').addEventListener('click', () => {
+  Object.assign(S, DEFAULTS);
+  Object.keys(DEFAULTS).forEach(k => { $(k).value = S[k]; });
+  writeStore(); render();
+});
+
+refresh();
+setInterval(refresh, 60 * 60 * 1000);
+})();
+</script>
+</body>
+</html>
