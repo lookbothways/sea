@@ -6,7 +6,7 @@
 <title>Patch launch windows</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:ital,wght@0,400;0,500;0,600;1,400&family=Roboto:wght@100&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=Roboto:wght@100&display=swap" rel="stylesheet">
 <style>
 /* Palette borrowed from Admiralty charts: buff land, shallow-water blue, magenta marks. */
 :root{
@@ -15,7 +15,6 @@
   --water:#B4D5E7; --water-line:#2F6F97;
   --mark:#A3238E;
   --go:#22764A; --maybe:#A86A0C; --strong:#B4483C;
-  --sea:#DCECF5; --land:#F6F1DC; --land-line:#D6CCA2; --route:#123F66;
 }
 *{box-sizing:border-box}
 html{background:var(--paper)}
@@ -71,40 +70,6 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
 .wins li{padding:.25rem 0 .25rem .9rem; border-left:3px solid var(--rule); margin-top:.3rem}
 .wins li.go{border-color:var(--go)} .wins li.maybe{border-color:var(--maybe)}
 .wins li.no{color:var(--muted)}
-.dayhead{display:flex; align-items:baseline; flex-wrap:wrap; gap:.3rem .8rem}
-.simbtn{margin:0 0 0 auto; padding:.1rem .7rem; font-size:.9rem}
-.simbtn[aria-expanded="true"]{background:var(--ink); color:var(--paper); border-color:var(--ink)}
-.simbtn:disabled{opacity:.4; cursor:default}
-.sim{
-  width:max(100%,70vw); margin:1rem 0 0 calc((100% - max(100%,70vw)) / 2);
-  padding:1rem; background:var(--paper); border:1px solid var(--rule); border-radius:3px;
-}
-.sim-result{margin:0 0 .7rem; font-size:1.05rem}
-.map{position:relative; aspect-ratio:1000/565; background:var(--sea); border-radius:3px; overflow:hidden}
-.map svg{position:absolute; inset:0; width:100%; height:100%}
-.land{fill:var(--land); stroke:var(--land-line); stroke-width:1; vector-effect:non-scaling-stroke}
-.route{fill:none; stroke:var(--route); stroke-width:2.2; stroke-dasharray:7 5; stroke-linecap:round; stroke-linejoin:round}
-.route.ghost{opacity:.25}
-.tackdot{fill:var(--paper); stroke:var(--route); stroke-width:1.3; opacity:.3}
-.tackdot.done{opacity:1}
-.launch{fill:var(--mark)}
-.boat{fill:var(--route); stroke:var(--paper); stroke-width:1.2; stroke-linejoin:round}
-.rose{fill:color-mix(in srgb,var(--paper) 70%,transparent); stroke:var(--route); stroke-width:1}
-.rose-arrow{fill:none; stroke:var(--route); stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
-.scale{fill:none; stroke:var(--muted); stroke-width:1.5}
-.lbl{position:absolute; transform:translate(-50%,-50%); font-size:.8rem; line-height:1; color:var(--muted); white-space:nowrap; pointer-events:none}
-.lbl.water{font-style:italic; color:#5D8BA8; font-size:.95rem; letter-spacing:.04em}
-.lbl.here{color:var(--mark); font-weight:600}
-.lbl.windlbl{left:94.2%; top:18.2%; color:var(--route); font-weight:600}
-.lbl.scalelbl{left:6.7%; top:92.3%}
-.sim-ctl{display:flex; align-items:center; gap:.8rem; margin-top:.7rem}
-.sim-ctl button{margin:0; min-width:4.4rem}
-.sim-ctl input{flex:1; width:auto; margin:0; padding:0; border:0; accent-color:var(--route)}
-.sim-time{min-width:3rem; font-weight:600; text-align:right}
-.sim-read{display:flex; flex-wrap:wrap; gap:.2rem 1.8rem; margin:.5rem 0 0; color:var(--muted)}
-.sim-read b{color:var(--ink); font-weight:600}
-.sim-note{margin:.5rem 0 0; color:var(--muted); font-size:.85rem}
-@media (max-width:40rem){ .lbl{font-size:.68rem} .lbl.windlbl{display:none} .sim{padding:.6rem} }
 .wins b{font-weight:600}
 .wins li.go b{color:var(--go)} .wins li.maybe b{color:var(--maybe)}
 
@@ -455,14 +420,11 @@ function renderDays(wins, now) {
 
     const rel = dayName(key, now);
     const title = dayFmt.format(sn.rise);
-    return `<section class="day"><div class="dayhead"><h2>${rel ? rel[0].toUpperCase() + rel.slice(1) + ', ' : ''}${title}<span>light ${hm(sn.rise)} to ${hm(sn.set)}</span></h2>` +
-      `<button type="button" class="simbtn" data-sim="${key}" aria-expanded="false" aria-controls="sim-${key}"${dayWins.length && tide ? '' : ' disabled'}>Simulate</button></div>` +
+    return `<section class="day"><h2>${rel ? rel[0].toUpperCase() + rel.slice(1) + ', ' : ''}${title}<span>light ${hm(sn.rise)} to ${hm(sn.set)}</span></h2>` +
       `<div class="track">${track}</div><div class="wind" aria-label="Wind in knots, three-hour blocks">${wind}</div>` +
       `<div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>` +
-      `<ul class="wins">${list}</ul><div class="sim" id="sim-${key}" hidden></div></section>`;
+      `<ul class="wins">${list}</ul></section>`;
   }).join('');
-  lastWins = wins;
-  if (simKey) { const k = simKey; simKey = null; cancelAnimationFrame(simRaf); openSim(k, true); }
 }
 
 function renderSource() {
@@ -494,309 +456,16 @@ async function refresh() {
   render();
 }
 
-/* ================= trip simulation =================
-   A sketch, not a passage plan: the coastline is simplified, there are no
-   depths or sandbanks, the stream speeds are estimates and the boat speed
-   is a rough Topper curve. */
-const KN = 0.514444, RAD = Math.PI / 180;
-const MAPB = { w: -4.790, e: -4.604, s: 52.0765, n: 52.1410 };
-const MX = 111320 * Math.cos(52.108 * RAD), MY = 111320;
-const MW = (MAPB.e - MAPB.w) * MX, MH = (MAPB.n - MAPB.s) * MY;   // map size in metres
-const VW = 1000, VK = VW / MW, VH = MH * VK;                       // drawing units
-const xy = (lon, lat) => ({ x: (lon - MAPB.w) * MX, y: (lat - MAPB.s) * MY });
-const vx = p => (p.x * VK).toFixed(1), vy = p => ((MH - p.y) * VK).toFixed(1);
-const norm180 = a => (((a % 360) + 540) % 360) - 180;
-
-// Coastline simplified from OpenStreetMap (via the geo-maps project), roughly 300 m detail.
-const COAST = [[-4.83564,52.04796],[-4.83799,52.05031],[-4.81906,52.05596],[-4.79142,52.05842],[-4.78335,52.0662],[-4.77112,52.07098],[-4.76704,52.07749],[-4.75906,52.07677],[-4.76056,52.08059],[-4.75193,52.08804],[-4.7521,52.09297],[-4.74166,52.09841],[-4.74351,52.10233],[-4.74949,52.10399],[-4.73656,52.10853],[-4.73136,52.11792],[-4.71081,52.10816],[-4.68805,52.10265],[-4.69155,52.10131],[-4.68128,52.09465],[-4.68215,52.08511],[-4.67858,52.08233],[-4.66159,52.08028],[-4.64594,52.08004],[-4.6813,52.08536],[-4.67482,52.10041],[-4.68214,52.10474],[-4.68831,52.10412],[-4.68508,52.11039],[-4.68763,52.11753],[-4.69194,52.11899],[-4.68539,52.1301],[-4.67764,52.12844],[-4.65828,52.13422],[-4.64659,52.13344],[-4.64043,52.13546],[-4.64432,52.13729],[-4.64077,52.1385],[-4.61899,52.13801],[-4.60522,52.14085],[-4.59991,52.13844],[-4.58282,52.13795],[-4.57575,52.1431],[-4.56786,52.14443],[-4.55,52.02],[-4.86,52.02]];
-const ISLAND = [[-4.69008,52.13262],[-4.68815,52.134],[-4.6863,52.13104],[-4.69591,52.13107]];
-const LAND = [COAST, ISLAND].map(r => r.map(c => xy(c[0], c[1])));
-const LABELS = [
-  ['Cardigan Bay', -4.752, 52.129, 'water'], ['Cardigan Island', -4.6905, 52.1388, ''],
-  ['Cemaes Head', -4.7265, 52.1085, ''], ['Poppit Sands', -4.7035, 52.1008, ''],
-  ['Gwbert', -4.6765, 52.1140, ''], ['Patch', -4.6765, 52.1058, 'here'],
-  ['St Dogmaels', -4.6965, 52.0835, ''], ['Cardigan', -4.6560, 52.0880, '']
-];
-
-// Waypoints. The number with each is how far either side of the line the boat may tack, in metres.
-const NODE = {
-  S0: xy(-4.6826, 52.1040), N1: xy(-4.6882, 52.1034), N2: xy(-4.6905, 52.1046), B1: xy(-4.6918, 52.1090),
-  B2: xy(-4.6950, 52.1150), S1: xy(-4.6990, 52.1212), S2: xy(-4.6992, 52.1290),
-  I1: xy(-4.6992, 52.1322), I2: xy(-4.6940, 52.1352), I3: xy(-4.6880, 52.1362), I4: xy(-4.6830, 52.1338),
-  I5: xy(-4.6834, 52.1312), K: xy(-4.68585, 52.13057), I6: xy(-4.6905, 52.1301),
-  // The way home runs a little east of the way out, so the two lines can be told apart.
-  S1h: xy(-4.6972, 52.1212), B2h: xy(-4.6932, 52.1150), B1h: xy(-4.6903, 52.1090)
-};
-const OUT = [['S0', 0], ['N1', 35], ['N2', 45], ['B1', 80], ['B2', 200], ['S1', 250], ['S2', 350]];
-const LOOP = [['I1', 120], ['I2', 100], ['I3', 100], ['I4', 100], ['I5', 60], ['K', 22], ['I6', 22], ['S2', 100]];
-const LOOP_R = [['I6', 60], ['K', 22], ['I5', 22], ['I4', 60], ['I3', 100], ['I2', 100], ['I1', 100], ['S2', 120]];
-const wp = ([n, cw]) => ({ x: NODE[n].x, y: NODE[n].y, cw });
-const HOME = [['S0', 35], ['N1', 35], ['N2', 60], ['B1h', 150], ['B2h', 200], ['S1h', 300]];
-function outAndBack(k, mid) {
-  return OUT.slice(0, k + 1).map(wp).concat((mid || []).map(wp), HOME.slice(0, k).reverse().map(wp));
-}
-// Most ambitious first. The first one that gets home by the back-by time is used.
-const TRIPS = [
-  { name: 'Round Cardigan Island', routes: [outAndBack(6, LOOP), outAndBack(6, LOOP_R)] },
-  { name: 'Out to Cardigan Island and back', routes: [outAndBack(6, [['I1', 120], ['S2', 120]])] },
-  { name: 'Out past Gwbert and back', routes: [outAndBack(5)] },
-  { name: 'Out to the estuary mouth and back', routes: [outAndBack(4)] },
-  { name: 'Into the bay off Poppit and back', routes: [outAndBack(3)] },
-  { name: 'Out through the narrows and back', routes: [outAndBack(2)] }
-];
-
-// Line the estuary stream follows, upriver to sea, with relative strength at each point.
-const CHAN = [[-4.6793, 52.0940, .7], [-4.6817, 52.0990, .8], [-4.6826, 52.1037, 1], [-4.6882, 52.1034, 1.3],
-  [-4.6905, 52.1046, 1], [-4.6918, 52.1090, .6], [-4.6950, 52.1150, .35], [-4.6990, 52.1212, .1]]
-  .map(c => Object.assign(xy(c[0], c[1]), { f: c[2] }));
-
-function windAt(ts) {
-  const n = hours.length;
-  const i = Math.max(0, Math.min(n - 1, Math.floor((ts - hours[0].t) / 3600000)));
-  const a = hours[i], b = hours[Math.min(n - 1, i + 1)];
-  const f = Math.max(0, Math.min(1, (ts - a.t) / 3600000));
-  const ua = -Math.sin(a.dir * RAD) * a.wind, va = -Math.cos(a.dir * RAD) * a.wind;
-  const ub = -Math.sin(b.dir * RAD) * b.wind, vb = -Math.cos(b.dir * RAD) * b.wind;
-  const u = ua + (ub - ua) * f, v = va + (vb - va) * f;                 // knots, the way the air moves
-  return { u: u * KN, v: v * KN, kn: Math.hypot(u, v), from: (Math.atan2(-u, -v) / RAD + 360) % 360 };
-}
-
-/* Stream: in the estuary it runs along the channel at about 2 knots for every
-   metre an hour the tide is falling, plus the river. Outside it is weak and
-   runs along the coast. Both are guesses. */
-function streamAt(x, y, ts, riverKn) {
-  const o = S.offset * MIN, h0 = tideAt(ts - o - 5 * MIN), h1 = tideAt(ts - o + 5 * MIN);
-  const rate = h0 == null || h1 == null ? 0 : (h1 - h0) * 6;            // metres an hour, rising is positive
-  const est = -2 * rate + riverKn;                                      // knots, seaward is positive
-  let best = 1e9, bi = 0, bt = 0;
-  for (let i = 0; i < CHAN.length - 1; i++) {
-    const a = CHAN[i], b = CHAN[i + 1], dx = b.x - a.x, dy = b.y - a.y;
-    const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy)));
-    const d = Math.hypot(x - a.x - t * dx, y - a.y - t * dy);
-    if (d < best) { best = d; bi = i; bt = t; }
-  }
-  const a = CHAN[bi], b = CHAN[bi + 1], L = Math.hypot(b.x - a.x, b.y - a.y);
-  const w = Math.max(0, 1 - best / 500), f = a.f + (b.f - a.f) * bt;
-  const e = est * f * w * KN, s = 0.3 * rate * (1 - w) * KN;
-  return { u: e * (b.x - a.x) / L + s * Math.sin(50 * RAD), v: e * (b.y - a.y) / L + s * Math.cos(50 * RAD), est };
-}
-
-const CLOSE = 45;   // closest the boat sails to the wind, degrees
-const ANG = [[0, 0], [30, .3], [45, .8], [60, .93], [90, 1], [130, 1], [160, .88], [180, .8]];
-function boatSpeed(tws, twa) {   // knots through the water
-  if (tws < 1) return 0;
-  let f = .8;
-  for (let i = 1; i < ANG.length; i++) {
-    if (twa <= ANG[i][0]) { f = ANG[i - 1][1] + (ANG[i][1] - ANG[i - 1][1]) * (twa - ANG[i - 1][0]) / (ANG[i][0] - ANG[i - 1][0]); break; }
-  }
-  const plane = tws > 11 && twa > 75 && twa < 150 ? Math.min(2.5, .3 * (tws - 11)) : 0;
-  return 4.6 * (1 - Math.exp(-tws / 5.5)) * f + plane;
-}
-
-function simulate(wps, t0, tMax, riverKn) {
-  const DT = 5;
-  let x = wps[0].x, y = wps[0].y, t = t0, leg = 1, tack = 0, side = 0, lastTack = -1e13, slow = 0;
-  let best = Infinity, bestT = t0, dist = 0, rec = 0, hdg = 0, sog = 0;
-  const path = [{ t, x, y, h: 0, s: 0 }], tacks = [];
-  const done = (ok, why) => { path.push({ t, x, y, h: hdg, s: ok ? 0 : sog }); return { ok, why, path, tacks, end: t, dist, riverKn }; };
-  while (leg < wps.length) {
-    if (t > tMax) return done(false, 'late');
-    const A = wps[leg - 1], B = wps[leg];
-    const dx = B.x - x, dy = B.y - y, d = Math.hypot(dx, dy);
-    const lx = B.x - A.x, ly = B.y - A.y, L = Math.hypot(lx, ly) || 1;
-    if (d < 20 || ((x - A.x) * lx + (y - A.y) * ly) / L >= L) { leg++; best = Infinity; bestT = t; tack = 0; continue; }
-    if (d < best - 15) { best = d; bestT = t; } else if (t - bestT > 20 * MIN) return done(false, 'stuck');
-    const w = windAt(t), c = streamAt(x, y, t, riverKn);
-    const ru = w.u - c.u, rv = w.v - c.v, tws = Math.hypot(ru, rv) / KN;   // wind felt on the moving water
-    const from = Math.atan2(-ru, -rv) / RAD, off = norm180(Math.atan2(dx, dy) / RAD - from);
-    if (Math.abs(off) >= CLOSE) { hdg = from + off; tack = 0; }            // the mark can be laid
-    else {                                                                // it is upwind, so beat
-      if (!tack) tack = off >= 0 ? 1 : -1;
-      const th = (from + tack * CLOSE) * RAD;
-      const xt = ((x - A.x) * ly - (y - A.y) * lx) / L, lat = Math.sin(th) * ly - Math.cos(th) * lx;
-      if (Math.abs(xt) > B.cw && xt * lat > 0 && t - lastTack > 20000) tack = -tack;
-      hdg = from + tack * CLOSE;
-    }
-    const rel = norm180(hdg - from), ns = rel >= 0 ? 1 : -1;
-    if (side && ns !== side && Math.abs(rel) < 90) {
-      tacks.push({ t, x, y }); lastTack = t; slow = 8;
-      path.push({ t, x, y, h: hdg, s: sog });
-    }
-    side = ns;
-    let bs = boatSpeed(tws, Math.abs(rel)) * KN;
-    if (slow > 0) { bs *= .3; slow -= DT; }
-    const gu = Math.sin(hdg * RAD) * bs + c.u, gv = Math.cos(hdg * RAD) * bs + c.v;
-    x += gu * DT; y += gv * DT; t += DT * 1000;
-    sog = Math.hypot(gu, gv) / KN; dist += Math.hypot(gu, gv) * DT;
-    if (++rec % 3 === 0) path.push({ t, x, y, h: hdg, s: sog });
-  }
-  return done(true);
-}
-
-function planTrip(w) {
-  const riverKn = Math.min(2, (river[w.key] || 0) / 120), tMax = w.back + 90 * MIN;
-  let r = null;
-  for (const trip of TRIPS) {
-    r = null;
-    for (const wps of trip.routes) {
-      const q = simulate(wps, w.launch, tMax, riverKn);
-      if (!r || (q.ok && (!r.ok || q.end < r.end))) r = q;
-    }
-    r.name = trip.name;
-    r.home = r.ok && r.end <= w.back;
-    if (r.home) return r;
-  }
-  return r;
-}
-
-/* ---------- simulation panel ---------- */
-let simKey = null, simRaf = 0, lastWins = [];
-
-function landPath(ring) {
-  const n = ring.length; let d = '';
-  for (let i = 0; i < n; i++) {
-    const a = ring[(i + n - 1) % n], b = ring[i], c = ring[(i + 1) % n];
-    const la = Math.hypot(b.x - a.x, b.y - a.y), lc = Math.hypot(c.x - b.x, c.y - b.y);
-    const r = Math.min(120, la * .4, lc * .4);
-    const p = { x: b.x + (a.x - b.x) * r / la, y: b.y + (a.y - b.y) * r / la };
-    const q = { x: b.x + (c.x - b.x) * r / lc, y: b.y + (c.y - b.y) * r / lc };
-    d += `${i ? 'L' : 'M'}${vx(p)},${vy(p)} Q${vx(b)},${vy(b)} ${vx(q)},${vy(q)} `;
-  }
-  return d + 'Z';
-}
-
-function simWindow(key) {
-  const c = lastWins.filter(w => w.key === key && !w.dark);
-  return c.find(w => w.status === 'go') || c.find(w => w.status === 'maybe') || c[0] || null;
-}
-
-function simText(r, w) {
-  const tk = r.tacks.length;
-  const stats = `${(r.dist / 1852).toFixed(1)} nautical miles, ${tk} ${tk === 1 ? 'tack' : 'tacks'}.`;
-  let s;
-  if (r.home) {
-    const spare = Math.round((w.back - r.end) / MIN);
-    s = `${r.name}, home at ${hm(r.end)} with ${spare} ${spare === 1 ? 'minute' : 'minutes'} in hand. ${stats}`;
-  } else if (r.ok) {
-    s = `Nothing gets you home by ${hm(w.back)}. ${r.name} takes until ${hm(r.end)}. ${stats}`;
-  } else if (r.why === 'stuck') {
-    s = `Nothing gets you home by ${hm(w.back)}. Even the short run through the narrows stalls against the wind or stream.`;
-  } else {
-    s = `Nothing gets you home by ${hm(w.back)}. Even on the short run through the narrows the boat is still out at ${hm(r.end)}.`;
-  }
-  if (w.status === 'no') s = `This window is outside your limits (${w.reasons.join('; ')}). ${s}`;
-  return s;
-}
-
-function closeSim() {
-  cancelAnimationFrame(simRaf); simRaf = 0;
-  if (!simKey) return;
-  const box = $('sim-' + simKey), btn = document.querySelector(`[data-sim="${simKey}"]`);
-  if (box) { box.hidden = true; box.innerHTML = ''; }
-  if (btn) btn.setAttribute('aria-expanded', 'false');
-  simKey = null;
-}
-
-function openSim(key, quiet) {
-  closeSim();
-  const box = $('sim-' + key), btn = document.querySelector(`[data-sim="${key}"]`), w = simWindow(key);
-  if (!box || !btn || !w || !tide || !hours.length) return;
-  simKey = key;
-  btn.setAttribute('aria-expanded', 'true');
-  const r = planTrip(w), path = r.path, n = path.length, t0 = path[0].t, total = r.end - t0;
-  const pt = p => vx(p) + ',' + vy(p);
-  const pos = l => `left:${((l[1] - MAPB.w) / (MAPB.e - MAPB.w) * 100).toFixed(2)}%;top:${((MAPB.n - l[2]) / (MAPB.n - MAPB.s) * 100).toFixed(2)}%`;
-
-  box.innerHTML =
-    `<p class="sim-result">${esc(simText(r, w))}</p>` +
-    `<div class="map"><svg viewBox="0 0 ${VW} ${VH.toFixed(1)}" role="img" aria-label="Map of the Teifi estuary and Cardigan Island with the simulated route">` +
-      `<path class="land" d="${LAND.map(landPath).join(' ')}"/>` +
-      `<path class="route ghost" d="${path.map((p, i) => (i ? 'L' : 'M') + pt(p)).join(' ')}"/><path class="route live" d=""/>` +
-      r.tacks.map(k => `<circle class="tackdot" cx="${vx(k)}" cy="${vy(k)}" r="3.2"/>`).join('') +
-      `<circle class="launch" cx="${vx(NODE.S0)}" cy="${vy(NODE.S0)}" r="4"/>` +
-      `<g transform="translate(${VW - 58},58)"><circle class="rose" r="30"/><path class="rose-arrow" d="M0,-18 L0,18 M-6,9 L0,18 L6,9"/></g>` +
-      `<path class="scale" d="M28,${(VH - 26).toFixed(1)} h${(1000 * VK).toFixed(1)}"/>` +
-      `<path class="boat" d="M0,-10 L5.5,7 L0,4 L-5.5,7 Z"/>` +
-    `</svg>` +
-    LABELS.map(l => `<span class="lbl ${l[3]}" style="${pos(l)}">${l[0]}</span>`).join('') +
-    `<span class="lbl windlbl"></span><span class="lbl scalelbl">1 km</span></div>` +
-    `<div class="sim-ctl"><button type="button" class="sim-play">Play</button>` +
-    `<input type="range" min="0" max="${Math.ceil(total / MIN)}" step="1" value="0" aria-label="Minutes since launch">` +
-    `<output class="sim-time"></output></div>` +
-    `<p class="sim-read"><span>Wind <b></b></span><span>Stream <b></b></span><span>Boat <b></b></span><span>Tacks <b></b></span></p>` +
-    `<p class="sim-note">A sketch of what the day allows, not a passage plan. The coastline is simplified (© OpenStreetMap contributors), ` +
-    `no depths or sandbanks are modelled, and the stream and boat speeds are estimates. Each circle is a tack.</p>`;
-  box.hidden = false;
-
-  const q = s => box.querySelector(s);
-  const live = q('.route.live'), boat = q('.boat'), arrow = q('.rose-arrow'), windlbl = q('.windlbl');
-  const slider = q('input'), playBtn = q('.sim-play'), timeEl = q('.sim-time');
-  const read = box.querySelectorAll('.sim-read b'), dots = box.querySelectorAll('.tackdot');
-  let T = 0, playing = false, ci = 0, cd = 'M' + pt(path[0]);
-
-  function frame() {
-    const ts = t0 + T;
-    let i = ci;
-    if (path[i].t > ts) { i = 0; cd = 'M' + pt(path[0]); }
-    while (i < n - 1 && path[i + 1].t <= ts) { i++; cd += ' L' + pt(path[i]); }
-    ci = i;
-    const a = path[i], b = path[Math.min(n - 1, i + 1)];
-    const f = b.t > a.t ? Math.max(0, Math.min(1, (ts - a.t) / (b.t - a.t))) : 0;
-    const p = { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
-    live.setAttribute('d', cd + ' L' + pt(p));
-    boat.setAttribute('transform', `translate(${pt(p)}) rotate(${b.h.toFixed(0)})`);
-    const wd = windAt(ts), st = streamAt(p.x, p.y, ts, r.riverKn), sk = Math.hypot(st.u, st.v) / KN;
-    arrow.setAttribute('transform', `rotate(${wd.from.toFixed(0)})`);
-    windlbl.textContent = `${compass(wd.from)} ${Math.round(wd.kn)} kn`;
-    let done = 0; dots.forEach((el, k) => { const on = r.tacks[k].t <= ts; el.classList.toggle('done', on); if (on) done++; });
-    timeEl.textContent = hm(ts);
-    read[0].textContent = `${compass(wd.from)} ${Math.round(wd.kn)} knots`;
-    read[1].textContent = sk < .15 ? 'slack' : `${sk.toFixed(1)} knots ${st.est > 0 ? 'ebb' : 'flood'}`;
-    read[2].textContent = `${(T >= total ? 0 : b.s).toFixed(1)} knots`;
-    read[3].textContent = `${done} of ${r.tacks.length}`;
-  }
-  function stop() { playing = false; cancelAnimationFrame(simRaf); playBtn.textContent = 'Play'; }
-  function play() {
-    if (T >= total) T = 0;
-    playing = true; playBtn.textContent = 'Pause';
-    const rate = Math.max(600, total / 14000);      // the whole trip plays in about 14 seconds
-    let prev = performance.now();
-    const step = now => {
-      if (!playing) return;
-      T = Math.min(total, T + (now - prev) * rate); prev = now;
-      slider.value = Math.round(T / MIN); frame();
-      if (T >= total) stop(); else simRaf = requestAnimationFrame(step);
-    };
-    simRaf = requestAnimationFrame(step);
-  }
-  playBtn.addEventListener('click', () => (playing ? stop() : play()));
-  slider.addEventListener('input', () => { stop(); T = Math.min(total, slider.value * MIN); frame(); });
-
-  frame();
-  if (!quiet) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) play();
-}
-
-$('days').addEventListener('click', e => {
-  const b = e.target.closest('[data-sim]');
-  if (!b) return;
-  const k = b.getAttribute('data-sim');
-  if (simKey === k) closeSim(); else openSim(k);
-});
-
 /* ---------- settings ---------- */
 Object.keys(DEFAULTS).forEach(k => {
   const el = $(k);
   el.value = S[k];
-  // Apply while typing, so nothing is left to redraw when the box loses focus.
-  const apply = commit => {
+  el.addEventListener('change', () => {
     const v = parseFloat(el.value);
-    if (isNaN(v)) { if (commit) el.value = S[k]; return; }
-    if (v === S[k]) return;
-    S[k] = v; writeStore(); render();
-  };
-  el.addEventListener('input', () => apply(false));
-  el.addEventListener('change', () => apply(true));
+    S[k] = isNaN(v) ? DEFAULTS[k] : v;
+    el.value = S[k];
+    writeStore(); render();
+  });
 });
 $('reset').addEventListener('click', () => {
   Object.assign(S, DEFAULTS);
