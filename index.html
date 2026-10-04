@@ -57,7 +57,7 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
   position:absolute; transform:translateX(-50%); padding:0 .2rem;
   font-size:.78rem; line-height:1.2; white-space:nowrap;
 }
-.ev.hw{top:2px} .ev.lw{bottom:2px; font-weight:600}
+.ev.hw{top:2px; font-weight:600} .ev.lw{bottom:2px}
 .now{position:absolute; top:0; bottom:0; width:2px; background:var(--mark)}
 
 .wind{display:grid; grid-template-columns:repeat(8,1fr); gap:1px; margin-top:2px}
@@ -148,9 +148,13 @@ footer p{margin:.4rem 0}
     <label>Lightest wind worth going, knots <input type="number" id="windMin" min="0" max="20"></label>
     <label>Strongest steady wind, knots <input type="number" id="windMax" min="5" max="30"></label>
     <label>Strongest gust, knots <input type="number" id="gustMax" min="5" max="40"></label>
-    <label>Launch this long before low water, minutes <input type="number" id="lead" min="0" max="300" step="15"></label>
-    <label>Be back this long after low water, minutes <input type="number" id="ret" min="30" max="360" step="15"></label>
-    <label>The tide turns at Patch this much later than predicted, minutes <input type="number" id="offset" min="-120" max="180" step="5"></label>
+    <label>Lowest high tide worth going, metres <input type="number" id="tideMin" min="0" max="7" step="0.1"></label>
+    <label>Launch this long before high water, minutes <input type="number" id="lead" min="0" max="300" step="15"></label>
+    <label>Be back this long after high water, minutes <input type="number" id="ret" min="30" max="360" step="15"></label>
+    <label>Highest waves, metres <input type="number" id="waveMax" min="0" max="3" step="0.1"></label>
+    <label>Highest swell, metres <input type="number" id="swellMax" min="0" max="3" step="0.1"></label>
+    <label>Longest swell period before it is marginal, seconds <input type="number" id="periodMax" min="4" max="20"></label>
+    <label>High water at Patch is this much later than predicted, minutes <input type="number" id="offset" min="-120" max="180" step="5"></label>
   </div>
   <button id="reset" type="button">Reset to defaults</button>
 </aside>
@@ -171,8 +175,8 @@ footer p{margin:.4rem 0}
 
 <footer>
   <p id="tideSource"></p>
-  <p>Wind, rain, daylight and river flow from Open-Meteo. Solid green is inside your limits, hatched amber is marginal.</p>
-  <p>This is a planning aid. The ebb at Patch runs out over the bar to open sea, so look at the water and the wind before you launch.</p>
+  <p>Wind, rain, daylight, waves, swell and river flow from Open-Meteo. The wave figures are a forecast for the open bay off Cardigan Island. Solid green is inside your limits, hatched amber is marginal.</p>
+  <p>This is a planning aid. After high water the ebb at Patch runs out over the bar to open sea, so look at the water and the wind before you launch.</p>
 </footer>
 
 </div>
@@ -187,11 +191,13 @@ const SEAWARD = 320;                         // bearing the ebb runs out on
 const HIGH_FLOW = 45;                        // m3/s, roughly 1.5x the Teifi's average
 const TZ = 'Europe/London';
 const MIN = 60000;
-const DEFAULTS = { windMin: 4, windMax: 14, gustMax: 20, lead: 90, ret: 120, offset: 0 };
-const STORE = 'patch-launch';
+const SEA = { lat: 52.13, lon: -4.72 };      // open water in the bay, for waves and the fallback tide
+const MODEL_DATUM = 2.6;                     // assumed mean sea level above chart datum at Port Cardigan, metres
+const DEFAULTS = { windMin: 4, windMax: 14, gustMax: 20, tideMin: 3.6, lead: 120, ret: 120, waveMax: 0.7, swellMax: 0.5, periodMax: 10, offset: 0 };
+const STORE = 'patch-launch-2';
 
 const S = Object.assign({}, DEFAULTS, readStore());
-let hours = [], sun = {}, tide = null, river = {}, weatherError = false;
+let hours = [], seas = [], sun = {}, tide = null, river = {}, weatherError = false;
 
 function readStore() {
   try { return JSON.parse(localStorage.getItem(STORE) || '{}'); } catch (e) { return {}; }
@@ -255,7 +261,7 @@ function extrema(ts, hs) {
   return out;
 }
 
-async function loadTide() {
+async function loadTide(marine) {
   // 1. Admiralty predictions, written to tides.json by the GitHub Action.
   try {
     const j = await getJSON('tides.json');
@@ -268,11 +274,19 @@ async function loadTide() {
       return { events: ev, source: 'ukho', station: j.station || 'nearest port', last: ev[ev.length - 1].t };
     }
   } catch (e) { /* no file yet, or stale: fall through */ }
-  // 2. Modelled sea level, no key needed.
-  const j = await getJSON(`https://marine-api.open-meteo.com/v1/marine?latitude=${LAT}&longitude=${LON}` +
-    '&hourly=sea_level_height_msl&timeformat=unixtime&timezone=GMT&forecast_days=7');
+  // 2. Modelled sea level, no key needed. It is relative to mean sea level, so shift it to chart datum.
+  const j = await marine;
   const ts = j.hourly.time.map(t => t * 1000);
-  return { events: extrema(ts, j.hourly.sea_level_height_msl), source: 'model' };
+  const events = extrema(ts, j.hourly.sea_level_height_msl);
+  events.forEach(e => { e.h += MODEL_DATUM; });
+  return { events, source: 'model' };
+}
+
+// One request serves the wave forecast and the fallback tide.
+function loadMarine() {
+  return getJSON(`https://marine-api.open-meteo.com/v1/marine?latitude=${SEA.lat}&longitude=${SEA.lon}` +
+    '&hourly=wave_height,wave_period,swell_wave_height,swell_wave_period,sea_level_height_msl' +
+    '&timeformat=unixtime&timezone=GMT&forecast_days=7');
 }
 
 async function loadRiver() {
@@ -319,34 +333,52 @@ function tideAt(ts) {
 }
 
 /* ---------- the judgement ---------- */
+/* A window is built around each high water: launch a set time before it and be
+   back a set time after. It is good only if the tide is high enough, it is light,
+   and the wind, waves and swell are all inside the limits. */
 function buildWindows() {
   if (!tide || !hours.length) return [];
   const lastHour = hours[hours.length - 1].t;
-  return tide.events.filter(e => e.type === 'LW' && !e.pad).map(e => {
-    const lw = e.t + S.offset * MIN, launch = lw - S.lead * MIN, back = lw + S.ret * MIN;
-    const key = lp(lw).key, sn = sun[key];
+  return tide.events.filter(e => e.type === 'HW' && !e.pad).map(e => {
+    const hw = e.t + S.offset * MIN, launch = hw - S.lead * MIN, back = hw + S.ret * MIN;
+    const key = lp(hw).key, sn = sun[key];
     if (!sn || back > lastHour + 60 * MIN) return null;
-    const w = { lw, launch, back, key, h: e.h, reasons: [], status: 'go' };
+    const w = { hw, launch, back, key, h: e.h, reasons: [], status: 'go' };
     w.dark = back <= sn.rise || launch >= sn.set;
-    const hrs = hours.filter(h => h.t >= launch - 30 * MIN && h.t <= back + 30 * MIN);
+    const inWin = h => h.t >= launch - 30 * MIN && h.t <= back + 30 * MIN;
+    const hrs = hours.filter(inWin);
     if (!hrs.length) return null;
     w.wind = Math.round(mean(hrs.map(h => h.wind)));
     w.gust = Math.round(Math.max(...hrs.map(h => h.gust)));
     const rad = hrs.map(h => h.dir * Math.PI / 180);
     w.dir = (Math.atan2(mean(rad.map(Math.sin)), mean(rad.map(Math.cos))) * 180 / Math.PI + 360) % 360;
     w.rain = hrs.reduce((s, h) => s + h.rain, 0);
+    const sea = seas.filter(inWin);
+    if (sea.length) {
+      w.wave = Math.max(...sea.map(x => x.wave));
+      const sw = sea.filter(x => x.swell != null);
+      if (sw.length) {
+        const top = sw.reduce((p, q) => (q.swell > p.swell ? q : p));
+        w.swell = top.swell; w.swellPeriod = top.swellPeriod || 0;
+      }
+    }
 
     const bad = r => { w.status = 'no'; w.reasons.push(r); };
     const warn = r => { if (w.status === 'go') w.status = 'maybe'; w.reasons.push(r); };
+    if (w.h < S.tideMin) bad(`high water is only ${w.h.toFixed(1)} m, under your ${S.tideMin} m`);
     if (launch < sn.rise) bad('starts before sunrise');
     if (back > sn.set - 30 * MIN) bad('runs into dusk');
     if (w.wind > S.windMax) bad(`wind over your ${S.windMax} knot limit`);
     else if (w.gust > S.gustMax) bad(`gusts over your ${S.gustMax} knot limit`);
     else if (w.wind < S.windMin) warn('very light wind');
-    if (w.wind >= 10 && angDiff(w.dir, SEAWARD) <= 50) warn('onshore wind against the ebb, choppy towards the bar');
+    if (w.wave > S.waveMax) bad(`waves over your ${S.waveMax} m limit`);
+    if (w.swell > S.swellMax) bad(`swell over your ${S.swellMax} m limit`);
+    else if (w.swell > 0.2 && w.swellPeriod > S.periodMax) warn(`long ${Math.round(w.swellPeriod)} second swell, which breaks hard on the bar`);
+    if (w.wave == null) warn('no wave forecast');
+    if (w.wind >= 10 && angDiff(w.dir, SEAWARD) <= 50) warn('onshore wind against the ebb after high water, choppy towards the bar');
     if (w.wind >= 8 && angDiff(w.dir, (SEAWARD + 180) % 360) <= 50) warn('offshore wind, so it is a beat home');
     if (w.rain > 3) warn('wet');
-    if (river[key] > HIGH_FLOW) warn('river running high, so a stronger ebb and a later flood');
+    if (river[key] > HIGH_FLOW) warn('river running high, so the ebb starts early and runs hard');
     return w;
   }).filter(Boolean);
 }
@@ -362,6 +394,10 @@ function dayName(key, now) {
 }
 
 function windText(w) { return `${compass(w.dir)} ${w.wind} knots, gusting ${w.gust}`; }
+function seaText(w) {
+  if (w.wave == null) return '';
+  return ` Waves ${w.wave.toFixed(1)} m` + (w.swell != null ? `, swell ${w.swell.toFixed(1)} m at ${Math.round(w.swellPeriod)} seconds.` : '.');
+}
 
 function renderHero(wins, now) {
   const h1 = $('hero'), sub = $('heroSub');
@@ -376,20 +412,20 @@ function renderHero(wins, now) {
     sub.textContent = 'Tide data did not load. Reload the page to try again.';
     return;
   }
-  const ahead = wins.filter(w => w.lw - 30 * MIN > now && !w.dark);
+  const ahead = wins.filter(w => w.back - 60 * MIN > now && !w.dark);
   const pick = ahead.find(w => w.status === 'go') || ahead.find(w => w.status === 'maybe');
   if (!pick) {
     h1.textContent = 'No launch window this week';
-    sub.textContent = 'Every daylight low water has wind outside your limits, or runs into the dark.';
+    sub.textContent = 'Every daylight high water is too low, outside your wind or wave limits, or runs into the dark.';
     return;
   }
   const rel = dayName(pick.key, now);
-  const day = rel || weekdayFmt.format(pick.lw);
+  const day = rel || weekdayFmt.format(pick.hw);
   h1.className = pick.status;
-  if (pick.launch <= now) h1.textContent = `Launch now, low water is at ${hm(pick.lw)}`;
+  if (pick.launch <= now) h1.textContent = `Launch now, high water is at ${hm(pick.hw)}`;
   else if (pick.status === 'go') h1.textContent = `Launch ${day} at ${hm(pick.launch)}`;
   else h1.textContent = `Marginal ${rel || 'on ' + day} at ${hm(pick.launch)}`;
-  let t = `Low water ${hm(pick.lw)}, back at Patch by ${hm(pick.back)}. ${windText(pick)}.`;
+  let t = `High water ${hm(pick.hw)} at ${pick.h.toFixed(1)} m, back at Patch by ${hm(pick.back)}. ${windText(pick)}.${seaText(pick)}`;
   if (pick.reasons.length) t += ' Watch for: ' + pick.reasons.join('; ') + '.';
   sub.textContent = t;
 }
@@ -434,7 +470,7 @@ function renderDays(wins, now) {
     });
     if (tide) tide.events.filter(e => !e.pad && lp(e.t + S.offset * MIN).key === key).forEach(e => {
       const t = e.t + S.offset * MIN, x = Math.min(1380, Math.max(60, lp(t).mins));
-      track += `<span class="ev ${e.type === 'HW' ? 'hw' : 'lw'}" style="left:${pct(x)}">${e.type === 'HW' ? 'High' : 'Low'} ${hm(t)}</span>`;
+      track += `<span class="ev ${e.type === 'HW' ? 'hw' : 'lw'}" style="left:${pct(x)}">${e.type === 'HW' ? 'High' : 'Low'} ${hm(t)}${e.type === 'HW' ? ', ' + e.h.toFixed(1) + ' m' : ''}</span>`;
     });
     if (key === today.key) track += `<div class="now" style="left:${pct(today.mins)}" title="Now"></div>`;
 
@@ -449,9 +485,9 @@ function renderDays(wins, now) {
 
     const label = { go: 'Good', maybe: 'Marginal', no: 'No' };
     const list = dayWins.length ? dayWins.map(w =>
-      `<li class="${w.status}"><b>${label[w.status]}.</b> Launch ${hm(w.launch)}, low water ${hm(w.lw)}, back by ${hm(w.back)}. ` +
-      `${windText(w)}.${w.reasons.length ? ' ' + esc(w.reasons.join('; ')).replace(/^./, c => c.toUpperCase()) + '.' : ''}</li>`
-    ).join('') : '<li class="no">Low water falls in the dark.</li>';
+      `<li class="${w.status}"><b>${label[w.status]}.</b> Launch ${hm(w.launch)}, high water ${hm(w.hw)} at ${w.h.toFixed(1)} m, back by ${hm(w.back)}. ` +
+      `${windText(w)}.${seaText(w)}${w.reasons.length ? ' ' + esc(w.reasons.join('; ')).replace(/^./, c => c.toUpperCase()) + '.' : ''}</li>`
+    ).join('') : '<li class="no">High water falls in the dark.</li>';
 
     const rel = dayName(key, now);
     const title = dayFmt.format(sn.rise);
@@ -473,6 +509,7 @@ function renderSource() {
       '<span class="ukho">Contains ADMIRALTY® tidal data:<br>© Crown Copyright and database right.</span>';
   } else {
     el.textContent = 'Tide times are modelled by Open-Meteo on an 8 km grid, so allow half an hour either way. ' +
+      `Heights assume mean sea level sits ${MODEL_DATUM} m above chart datum, so the high tide test is rough. ` +
       'Add tides.json from the Admiralty API for proper predictions.';
   }
 }
@@ -487,10 +524,18 @@ function render() {
 }
 
 async function refresh() {
-  const [w, t, r] = await Promise.allSettled([loadWeather(), loadTide(), loadRiver()]);
+  const m = loadMarine();
+  const [w, t, r, sea] = await Promise.allSettled([loadWeather(), loadTide(m), loadRiver(), m]);
   weatherError = w.status === 'rejected';
   tide = t.status === 'fulfilled' && t.value.events.length >= 2 ? prepTide(t.value) : null;
   if (r.status === 'rejected') river = {};
+  seas = [];
+  if (sea.status === 'fulfilled') {
+    const h = sea.value.hourly;
+    seas = h.time.map((x, i) => ({
+      t: x * 1000, wave: h.wave_height[i], swell: h.swell_wave_height[i], swellPeriod: h.swell_wave_period[i]
+    })).filter(x => x.wave != null);
+  }
   render();
 }
 
