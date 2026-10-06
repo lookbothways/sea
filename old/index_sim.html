@@ -75,14 +75,11 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
 .simbtn{margin:0 0 0 auto; padding:.1rem .7rem; font-size:.9rem}
 .simbtn[aria-expanded="true"]{background:var(--ink); color:var(--paper); border-color:var(--ink)}
 .simbtn:disabled{opacity:.4; cursor:default}
-.simbtn.dirty,.sim-head .sim-again{background:var(--mark); border-color:var(--mark); color:#fff}
 .sim{
   width:max(100%,70vw); margin:1rem 0 0 calc((100% - max(100%,70vw)) / 2);
   padding:1rem; background:var(--paper); border:1px solid var(--rule); border-radius:3px;
 }
-.sim-head{display:flex; align-items:flex-start; gap:.6rem; margin-bottom:.7rem}
-.sim-result{flex:1; margin:0; font-size:1.05rem}
-.sim-head button{margin:0; padding:.1rem .7rem; font-size:.9rem; white-space:nowrap}
+.sim-result{margin:0 0 .7rem; font-size:1.05rem}
 .map{position:relative; aspect-ratio:1000/565; background:var(--sea); border-radius:3px; overflow:hidden}
 .map svg{position:absolute; inset:0; width:100%; height:100%}
 .land{fill:var(--land); stroke:var(--land-line); stroke-width:1; vector-effect:non-scaling-stroke}
@@ -100,22 +97,6 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
 .lbl.here{color:var(--mark); font-weight:600}
 .lbl.windlbl{left:94.2%; top:18.2%; color:var(--route); font-weight:600}
 .lbl.scalelbl{left:6.7%; top:92.3%}
-.map{user-select:none; -webkit-user-select:none}
-.xh{
-  position:absolute; width:28px; height:28px; margin:0; padding:0; transform:translate(-50%,-50%);
-  color:var(--mark); border:0; border-radius:50%; cursor:grab; touch-action:none;
-  background:radial-gradient(circle,transparent 5px,currentColor 5px,currentColor 6.5px,transparent 6.5px);
-}
-.xh::before,.xh::after{content:""; position:absolute; background:currentColor}
-.xh::before{left:50%; top:1px; bottom:1px; width:1.5px; margin-left:-.75px}
-.xh::after{top:50%; left:1px; right:1px; height:1.5px; margin-top:-.75px}
-.xh span{
-  position:absolute; left:100%; top:50%; transform:translateY(-50%); margin-left:.1rem;
-  font-size:.78rem; font-weight:600; line-height:1; white-space:nowrap; pointer-events:none;
-  text-shadow:0 0 3px var(--paper),0 0 3px var(--paper),0 0 3px var(--paper);
-}
-.xh.auto{opacity:.55}
-.xh.drag{cursor:grabbing}
 .sim-ctl{display:flex; align-items:center; gap:.8rem; margin-top:.7rem}
 .sim-ctl button{margin:0; min-width:4.4rem}
 .sim-ctl input{flex:1; width:auto; margin:0; padding:0; border:0; accent-color:var(--route)}
@@ -127,6 +108,7 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
 .wins b{font-weight:600}
 .wins li.go b{color:var(--go)} .wins li.maybe b{color:var(--maybe)}
 
+.rain{display:block; width:100%; aspect-ratio:16/9; margin-top:2.5rem; border:1px solid var(--rule); border-radius:3px}
 .page{max-width:54rem; margin:0 auto; padding:3.6rem 1rem 3rem}
 .side-toggle{position:fixed; top:.6rem; left:.6rem; z-index:3; margin:0; background:var(--paper)}
 .side-toggle::before{content:"\203A"; display:inline-block; margin-right:.4rem; transition:transform .2s}
@@ -188,6 +170,7 @@ footer p{margin:.4rem 0}
 
 <main id="days"></main>
 
+<iframe class="rain" src="https://lookbothways.github.io/cardigan-weather/?place=cardigan" title="Cardigan rainfall" loading="lazy"></iframe>
 
 
 <footer>
@@ -580,7 +563,7 @@ const LABELS = [
   ['St Dogmaels', -4.6965, 52.0835, ''], ['Cardigan', -4.6560, 52.0880, '']
 ];
 
-// Fixed waypoints on the standard route round Cardigan Island.
+// Waypoints. The number with each is how far either side of the line the boat may tack, in metres.
 const NODE = {
   S0: xy(-4.6826, 52.1040), N1: xy(-4.6882, 52.1034), N2: xy(-4.6905, 52.1046), B1: xy(-4.6918, 52.1090),
   B2: xy(-4.6950, 52.1150), S1: xy(-4.6990, 52.1212), S2: xy(-4.6992, 52.1290),
@@ -589,90 +572,23 @@ const NODE = {
   // The way home runs a little east of the way out, so the two lines can be told apart.
   S1h: xy(-4.6972, 52.1212), B2h: xy(-4.6932, 52.1150), B1h: xy(-4.6903, 52.1090)
 };
-const named = list => list.map(n => NODE[n]);
-const WAY_OUT = named(['S0', 'N1', 'N2', 'B1', 'B2', 'S1', 'S2']);
-const WAY_HOME = named(['S1h', 'B2h', 'B1h', 'N2', 'N1', 'S0']);
-// Extra turning points, so a route can be found to wherever a crosshair is dropped.
-const GRAPH = Object.assign({}, NODE, {
-  R1: xy(-4.6817, 52.0990), R2: xy(-4.6795, 52.0940), R3: xy(-4.6809, 52.0885),
-  W1: xy(-4.7150, 52.1180), W2: xy(-4.7420, 52.1260), W3: xy(-4.7700, 52.1000),
-  N0: xy(-4.7150, 52.1370), E1: xy(-4.6700, 52.1365), E2: xy(-4.6520, 52.1390)
-});
-const SAFE = 40;   // a route line never passes closer to land than this, metres
-
-function landDist(p) {   // metres to the nearest land, 0 when on it
-  let best = 1e9;
-  for (const ring of LAND) {
-    let inside = false;
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const a = ring[i], b = ring[j], dx = b.x - a.x, dy = b.y - a.y;
-      if ((a.y > p.y) !== (b.y > p.y) && p.x < dx * (p.y - a.y) / dy + a.x) inside = !inside;
-      const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
-      const d = Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
-      if (d < best) best = d;
-    }
-    if (inside) return 0;
-  }
-  return best;
+const OUT = [['S0', 0], ['N1', 35], ['N2', 45], ['B1', 80], ['B2', 200], ['S1', 250], ['S2', 350]];
+const LOOP = [['I1', 120], ['I2', 100], ['I3', 100], ['I4', 100], ['I5', 60], ['K', 22], ['I6', 22], ['S2', 100]];
+const LOOP_R = [['I6', 60], ['K', 22], ['I5', 22], ['I4', 60], ['I3', 100], ['I2', 100], ['I1', 100], ['S2', 120]];
+const wp = ([n, cw]) => ({ x: NODE[n].x, y: NODE[n].y, cw });
+const HOME = [['S0', 35], ['N1', 35], ['N2', 60], ['B1h', 150], ['B2h', 200], ['S1h', 300]];
+function outAndBack(k, mid) {
+  return OUT.slice(0, k + 1).map(wp).concat((mid || []).map(wp), HOME.slice(0, k).reverse().map(wp));
 }
-function clearance(a, b, step) {   // land distance at points along the line from a to b
-  const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / step)), out = [];
-  for (let i = 0; i <= n; i++) out.push(landDist({ x: a.x + (b.x - a.x) * i / n, y: a.y + (b.y - a.y) * i / n }));
-  return out;
-}
-function sees(a, b) {
-  const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 20));
-  for (let i = 0; i <= n; i++) if (landDist({ x: a.x + (b.x - a.x) * i / n, y: a.y + (b.y - a.y) * i / n }) < SAFE) return false;
-  return true;
-}
-const gap = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-const segKey = (a, b) => [a, b].map(p => Math.round(p.x) + ',' + Math.round(p.y)).sort().join('|');
-
-let EDGES = null;   // which turning points can see each other, worked out the first time it is needed
-function edges() {
-  if (EDGES) return EDGES;
-  const ids = Object.keys(GRAPH);
-  EDGES = {};
-  ids.forEach(i => { EDGES[i] = {}; });
-  for (let a = 0; a < ids.length; a++) for (let b = a + 1; b < ids.length; b++) {
-    if (sees(GRAPH[ids[a]], GRAPH[ids[b]])) EDGES[ids[a]][ids[b]] = EDGES[ids[b]][ids[a]] = gap(GRAPH[ids[a]], GRAPH[ids[b]]);
-  }
-  return EDGES;
-}
-
-/* Shortest clear path over water between two points. Lines already sailed
-   (in `used`) cost a little more, so the way home differs where it easily can. */
-function shortest(a, b, used) {
-  const E = edges(), pos = Object.assign({ _a: a, _b: b }, GRAPH), adj = { _a: {}, _b: {} };
-  Object.keys(GRAPH).forEach(i => {
-    adj[i] = Object.assign({}, E[i]);
-    ['_a', '_b'].forEach(k => {
-      const d = gap(pos[k], GRAPH[i]);
-      if (d < 1 || sees(pos[k], GRAPH[i])) adj[k][i] = adj[i][k] = d;
-    });
-  });
-  if (sees(a, b)) adj._a._b = adj._b._a = gap(a, b);
-  const cost = {}, prev = {}, done = {};
-  Object.keys(pos).forEach(k => { cost[k] = Infinity; });
-  cost._a = 0;
-  for (;;) {
-    let u = null;
-    for (const k in cost) if (!done[k] && (u === null || cost[k] < cost[u])) u = k;
-    if (u === null || cost[u] === Infinity) return null;
-    if (u === '_b') break;
-    done[u] = true;
-    for (const v in adj[u]) {
-      const c = cost[u] + adj[u][v] * (used && used.has(segKey(pos[u], pos[v])) ? 1.25 : 1);
-      if (c < cost[v]) { cost[v] = c; prev[v] = u; }
-    }
-  }
-  const out = [];
-  for (let k = '_b'; k; k = prev[k]) out.unshift(pos[k]);
-  return out.filter((p, i) => !i || gap(p, out[i - 1]) >= 1);
-}
-
-// Adds to each point how much room there is along the leg that arrives at it.
-const makeRoute = pts => pts.map((p, i) => ({ x: p.x, y: p.y, clr: i ? clearance(pts[i - 1], p, 25) : null }));
+// Most ambitious first. The first one that gets home by the back-by time is used.
+const TRIPS = [
+  { name: 'Round Cardigan Island', routes: [outAndBack(6, LOOP), outAndBack(6, LOOP_R)] },
+  { name: 'Out to Cardigan Island and back', routes: [outAndBack(6, [['I1', 120], ['S2', 120]])] },
+  { name: 'Out past Gwbert and back', routes: [outAndBack(5)] },
+  { name: 'Out to the estuary mouth and back', routes: [outAndBack(4)] },
+  { name: 'Into the bay off Poppit and back', routes: [outAndBack(3)] },
+  { name: 'Out through the narrows and back', routes: [outAndBack(2)] }
+];
 
 // Line the estuary stream follows, upriver to sea, with relative strength at each point.
 const CHAN = [[-4.6793, 52.0940, .7], [-4.6817, 52.0990, .8], [-4.6826, 52.1037, 1], [-4.6882, 52.1034, 1.3],
@@ -733,25 +649,17 @@ function simulate(wps, t0, tMax, riverKn) {
     const A = wps[leg - 1], B = wps[leg];
     const dx = B.x - x, dy = B.y - y, d = Math.hypot(dx, dy);
     const lx = B.x - A.x, ly = B.y - A.y, L = Math.hypot(lx, ly) || 1;
-    const along = ((x - A.x) * lx + (y - A.y) * ly) / L;
-    if (d < 20 || along >= L) { leg++; best = Infinity; bestT = t; tack = 0; continue; }
+    if (d < 20 || ((x - A.x) * lx + (y - A.y) * ly) / L >= L) { leg++; best = Infinity; bestT = t; tack = 0; continue; }
     if (d < best - 15) { best = d; bestT = t; } else if (t - bestT > 20 * MIN) return done(false, 'stuck');
     const w = windAt(t), c = streamAt(x, y, t, riverKn);
     const ru = w.u - c.u, rv = w.v - c.v, tws = Math.hypot(ru, rv) / KN;   // wind felt on the moving water
-    const xt = ((x - A.x) * ly - (y - A.y) * lx) / L;                       // metres off the leg line, right is positive
-    // Steer for a point a little further along the line, so the boat rejoins it before pressing on.
-    const look = Math.min(L, Math.max(0, along) + Math.max(80, 2 * Math.abs(xt)));
-    const from = Math.atan2(-ru, -rv) / RAD;
-    const off = norm180(Math.atan2(A.x + lx / L * look - x, A.y + ly / L * look - y) / RAD - from);
+    const from = Math.atan2(-ru, -rv) / RAD, off = norm180(Math.atan2(dx, dy) / RAD - from);
     if (Math.abs(off) >= CLOSE) { hdg = from + off; tack = 0; }            // the mark can be laid
     else {                                                                // it is upwind, so beat
       if (!tack) tack = off >= 0 ? 1 : -1;
-      const th = (from + tack * CLOSE) * RAD, lat = Math.sin(th) * ly - Math.cos(th) * lx;
-      // Tack at the edge of the lane, which is wide in open water and narrow near land, or when the shore is close ahead.
-      const room = B.clr[Math.round(Math.max(0, Math.min(1, along / L)) * (B.clr.length - 1))];
-      const edge = Math.abs(xt) > Math.max(12, Math.min(350, .42 * room)) && xt * lat > 0;
-      const shore = landDist({ x: x + Math.sin(th) * 40, y: y + Math.cos(th) * 40 }) < 20;
-      if ((edge || shore) && t - lastTack > 20000) tack = -tack;
+      const th = (from + tack * CLOSE) * RAD;
+      const xt = ((x - A.x) * ly - (y - A.y) * lx) / L, lat = Math.sin(th) * ly - Math.cos(th) * lx;
+      if (Math.abs(xt) > B.cw && xt * lat > 0 && t - lastTack > 20000) tack = -tack;
       hdg = from + tack * CLOSE;
     }
     const rel = norm180(hdg - from), ns = rel >= 0 ? 1 : -1;
@@ -770,43 +678,20 @@ function simulate(wps, t0, tMax, riverKn) {
   return done(true);
 }
 
-/* The route. Untouched, it is the standard loop round Cardigan Island, taken
-   whichever way round is quicker. Once a crosshair has been moved it runs from
-   Patch to the furthest point, through point 2 if that has been placed, and home. */
-let simPts = { fp: null, p2: null };
-
-function planRoute(w) {
+function planTrip(w) {
   const riverKn = Math.min(2, (river[w.key] || 0) / 120), tMax = w.back + 90 * MIN;
-  const run = (pts, fpIndex, name) => Object.assign(simulate(makeRoute(pts), w.launch, tMax, riverKn), { pts, fpIndex, name });
-  let r;
-  if (!simPts.fp && !simPts.p2) {
-    const a = run(WAY_OUT.concat(named(['I1', 'I2', 'I3', 'I4', 'I5', 'K', 'I6', 'S2']), WAY_HOME), WAY_OUT.length + 2, 'Round Cardigan Island');
-    const b = run(WAY_OUT.concat(named(['I6', 'K', 'I5', 'I4', 'I3', 'I2', 'I1', 'S2']), WAY_HOME), WAY_OUT.length + 4, 'Round Cardigan Island');
-    r = b.ok && (!a.ok || b.end < a.end) ? b : a;
-  } else {
-    const fp = simPts.fp || NODE.I3, out = shortest(NODE.S0, fp);
-    if (!out) return null;
-    const used = new Set(out.slice(1).map((p, i) => segKey(out[i], p)));
-    let back = simPts.p2 ? shortest(fp, simPts.p2, used) : shortest(fp, NODE.S0, used);
-    if (back && simPts.p2) { const last = shortest(simPts.p2, NODE.S0, used); back = last && back.concat(last.slice(1)); }
-    if (!back) return null;
-    r = run(out.concat(back.slice(1)), out.length - 1, 'Your route');
+  let r = null;
+  for (const trip of TRIPS) {
+    r = null;
+    for (const wps of trip.routes) {
+      const q = simulate(wps, w.launch, tMax, riverKn);
+      if (!r || (q.ok && (!r.ok || q.end < r.end))) r = q;
+    }
+    r.name = trip.name;
+    r.home = r.ok && r.end <= w.back;
+    if (r.home) return r;
   }
-  r.home = r.ok && r.end <= w.back;
   return r;
-}
-
-// The point half way along a line of points, by distance.
-function halfWay(pts) {
-  let total = 0;
-  for (let i = 1; i < pts.length; i++) total += gap(pts[i - 1], pts[i]);
-  let left = total / 2;
-  for (let i = 1; i < pts.length; i++) {
-    const d = gap(pts[i - 1], pts[i]);
-    if (left <= d && d > 0) return { x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * left / d, y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * left / d };
-    left -= d;
-  }
-  return pts[pts.length - 1];
 }
 
 /* ---------- simulation panel ---------- */
@@ -831,14 +716,19 @@ function simWindow(key) {
 }
 
 function simText(r, w) {
-  if (!r) return 'No clear route through those points. Move a crosshair and press Resimulate.';
-  const tk = r.tacks.length, mins = n => `${n} ${n === 1 ? 'minute' : 'minutes'}`;
+  const tk = r.tacks.length;
   const stats = `${(r.dist / 1852).toFixed(1)} nautical miles, ${tk} ${tk === 1 ? 'tack' : 'tacks'}.`;
   let s;
-  if (r.home) s = `${r.name}, home at ${hm(r.end)} with ${mins(Math.round((w.back - r.end) / MIN))} in hand. ${stats}`;
-  else if (r.ok) s = `${r.name} gets you home at ${hm(r.end)}, ${mins(Math.round((r.end - w.back) / MIN))} after your back-by time. ${stats}`;
-  else if (r.why === 'stuck') s = `${r.name} stalls at ${hm(r.end)}, unable to make way against the wind or stream.`;
-  else s = `${r.name} is still out at ${hm(r.end)}, long after your back-by time.`;
+  if (r.home) {
+    const spare = Math.round((w.back - r.end) / MIN);
+    s = `${r.name}, home at ${hm(r.end)} with ${spare} ${spare === 1 ? 'minute' : 'minutes'} in hand. ${stats}`;
+  } else if (r.ok) {
+    s = `Nothing gets you home by ${hm(w.back)}. ${r.name} takes until ${hm(r.end)}. ${stats}`;
+  } else if (r.why === 'stuck') {
+    s = `Nothing gets you home by ${hm(w.back)}. Even the short run through the narrows stalls against the wind or stream.`;
+  } else {
+    s = `Nothing gets you home by ${hm(w.back)}. Even on the short run through the narrows the boat is still out at ${hm(r.end)}.`;
+  }
   if (w.status === 'no') s = `This window is outside your limits (${w.reasons.join('; ')}). ${s}`;
   return s;
 }
@@ -848,7 +738,7 @@ function closeSim() {
   if (!simKey) return;
   const box = $('sim-' + simKey), btn = document.querySelector(`[data-sim="${simKey}"]`);
   if (box) { box.hidden = true; box.innerHTML = ''; }
-  if (btn) { btn.setAttribute('aria-expanded', 'false'); btn.textContent = 'Simulate'; btn.classList.remove('dirty'); }
+  if (btn) btn.setAttribute('aria-expanded', 'false');
   simKey = null;
 }
 
@@ -858,39 +748,28 @@ function openSim(key, quiet) {
   if (!box || !btn || !w || !tide || !hours.length) return;
   simKey = key;
   btn.setAttribute('aria-expanded', 'true');
-  btn.textContent = 'Resimulate';
-  const S0 = NODE.S0, plan = planRoute(w);
-  const r = plan || { path: [{ t: w.launch, x: S0.x, y: S0.y, h: 0, s: 0 }], tacks: [], end: w.launch, dist: 0, riverKn: 0 };
-  const path = r.path, n = path.length, t0 = path[0].t, total = r.end - t0;
+  const r = planTrip(w), path = r.path, n = path.length, t0 = path[0].t, total = r.end - t0;
   const pt = p => vx(p) + ',' + vy(p);
   const pos = l => `left:${((l[1] - MAPB.w) / (MAPB.e - MAPB.w) * 100).toFixed(2)}%;top:${((MAPB.n - l[2]) / (MAPB.n - MAPB.s) * 100).toFixed(2)}%`;
-  const at = { fp: simPts.fp || (plan ? plan.pts[plan.fpIndex] : NODE.I3) };
-  at.p2 = simPts.p2 || halfWay(plan ? plan.pts.slice(plan.fpIndex) : [at.fp, S0]);
 
   box.innerHTML =
-    `<div class="sim-head"><p class="sim-result">${esc(simText(plan, w))}</p>` +
-    `<button type="button" class="sim-again" hidden>Resimulate</button>` +
-    `<button type="button" class="sim-reset"${simPts.fp || simPts.p2 ? '' : ' hidden'}>Reset route</button>` +
-    `<button type="button" class="sim-close">Close</button></div>` +
+    `<p class="sim-result">${esc(simText(r, w))}</p>` +
     `<div class="map"><svg viewBox="0 0 ${VW} ${VH.toFixed(1)}" role="img" aria-label="Map of the Teifi estuary and Cardigan Island with the simulated route">` +
       `<path class="land" d="${LAND.map(landPath).join(' ')}"/>` +
       `<path class="route ghost" d="${path.map((p, i) => (i ? 'L' : 'M') + pt(p)).join(' ')}"/><path class="route live" d=""/>` +
       r.tacks.map(k => `<circle class="tackdot" cx="${vx(k)}" cy="${vy(k)}" r="3.2"/>`).join('') +
-      `<circle class="launch" cx="${vx(S0)}" cy="${vy(S0)}" r="4"/>` +
+      `<circle class="launch" cx="${vx(NODE.S0)}" cy="${vy(NODE.S0)}" r="4"/>` +
       `<g transform="translate(${VW - 58},58)"><circle class="rose" r="30"/><path class="rose-arrow" d="M0,-18 L0,18 M-6,9 L0,18 L6,9"/></g>` +
       `<path class="scale" d="M28,${(VH - 26).toFixed(1)} h${(1000 * VK).toFixed(1)}"/>` +
       `<path class="boat" d="M0,-10 L5.5,7 L0,4 L-5.5,7 Z"/>` +
     `</svg>` +
     LABELS.map(l => `<span class="lbl ${l[3]}" style="${pos(l)}">${l[0]}</span>`).join('') +
-    `<span class="lbl windlbl"></span><span class="lbl scalelbl">1 km</span>` +
-    `<button type="button" class="xh" data-pt="fp" aria-label="Furthest point. Drag it, or use the arrow keys, to move it."><span>Furthest point</span></button>` +
-    `<button type="button" class="xh${simPts.p2 ? '' : ' auto'}" data-pt="p2" aria-label="Point 2, on the way home. Drag it, or use the arrow keys, to move it."><span>Point 2</span></button></div>` +
+    `<span class="lbl windlbl"></span><span class="lbl scalelbl">1 km</span></div>` +
     `<div class="sim-ctl"><button type="button" class="sim-play">Play</button>` +
     `<input type="range" min="0" max="${Math.ceil(total / MIN)}" step="1" value="0" aria-label="Minutes since launch">` +
     `<output class="sim-time"></output></div>` +
     `<p class="sim-read"><span>Wind <b></b></span><span>Stream <b></b></span><span>Boat <b></b></span><span>Tacks <b></b></span></p>` +
-    `<p class="sim-note"><span class="sim-hint" aria-live="polite">Drag a crosshair to change the route, then press Resimulate.</span> ` +
-    `This is a sketch of what the day allows, not a passage plan. The coastline is simplified (© OpenStreetMap contributors), ` +
+    `<p class="sim-note">A sketch of what the day allows, not a passage plan. The coastline is simplified (© OpenStreetMap contributors), ` +
     `no depths or sandbanks are modelled, and the stream and boat speeds are estimates. Each circle is a tack.</p>`;
   box.hidden = false;
 
@@ -923,7 +802,6 @@ function openSim(key, quiet) {
   }
   function stop() { playing = false; cancelAnimationFrame(simRaf); playBtn.textContent = 'Play'; }
   function play() {
-    if (total <= 0) return;
     if (T >= total) T = 0;
     playing = true; playBtn.textContent = 'Pause';
     const rate = Math.max(600, total / 14000);      // the whole trip plays in about 14 seconds
@@ -939,60 +817,6 @@ function openSim(key, quiet) {
   playBtn.addEventListener('click', () => (playing ? stop() : play()));
   slider.addEventListener('input', () => { stop(); T = Math.min(total, slider.value * MIN); frame(); });
 
-  /* Crosshairs. Nothing is recalculated until Resimulate is pressed. Point 2 keeps
-     to the middle of the way home until it has been moved itself. */
-  const mapEl = q('.map'), hint = q('.sim-hint'), HINT = hint.textContent;
-  const xh = { fp: q('[data-pt="fp"]'), p2: q('[data-pt="p2"]') };
-  const put = (k, p) => {
-    at[k] = p;
-    xh[k].style.left = (p.x / MW * 100).toFixed(2) + '%';
-    xh[k].style.top = ((MH - p.y) / MH * 100).toFixed(2) + '%';
-  };
-  const follow = () => {
-    if (simPts.p2) return;
-    const back = shortest(at.fp, S0);
-    if (back) put('p2', halfWay(back));
-  };
-  const commit = (k, p, from) => {
-    if (landDist(p) < SAFE + 5) {
-      put(k, from); if (k === 'fp') follow();
-      hint.textContent = 'That spot is on or too close to land.';
-      return;
-    }
-    simPts[k] = { x: p.x, y: p.y }; put(k, p);
-    if (k === 'fp') follow(); else xh.p2.classList.remove('auto');
-    hint.textContent = HINT;
-    btn.classList.add('dirty'); q('.sim-again').hidden = false; q('.sim-reset').hidden = false;
-  };
-  Object.keys(xh).forEach(k => {
-    const el = xh[k];
-    let from = null, moved = false, raf = 0;
-    put(k, at[k]);
-    el.addEventListener('pointerdown', e => { from = at[k]; moved = false; el.setPointerCapture(e.pointerId); el.classList.add('drag'); stop(); });
-    el.addEventListener('pointermove', e => {
-      if (!from) return;
-      const rc = mapEl.getBoundingClientRect();
-      const fx = Math.max(0, Math.min(1, (e.clientX - rc.left) / rc.width)), fy = Math.max(0, Math.min(1, (e.clientY - rc.top) / rc.height));
-      const p = { x: fx * MW, y: (1 - fy) * MH };
-      if (gap(p, from) / MW * rc.width > 3) moved = true;
-      put(k, p);
-      if (k === 'fp' && !raf) raf = requestAnimationFrame(() => { raf = 0; follow(); });
-    });
-    const end = () => {
-      if (!from) return;
-      const f = from; from = null; el.classList.remove('drag');
-      if (moved) commit(k, at[k], f); else put(k, f);
-    };
-    el.addEventListener('pointerup', end);
-    el.addEventListener('pointercancel', end);
-    el.addEventListener('keydown', e => {
-      const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
-      if (!d) return;
-      e.preventDefault(); stop();
-      commit(k, { x: Math.max(0, Math.min(MW, at[k].x + d[0] * 50)), y: Math.max(0, Math.min(MH, at[k].y + d[1] * 50)) }, at[k]);
-    });
-  });
-
   frame();
   if (!quiet) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) play();
@@ -1000,10 +824,9 @@ function openSim(key, quiet) {
 
 $('days').addEventListener('click', e => {
   const b = e.target.closest('[data-sim]');
-  if (b) { const k = b.getAttribute('data-sim'); openSim(k, k === simKey); return; }
-  if (e.target.closest('.sim-again')) openSim(simKey, true);
-  else if (e.target.closest('.sim-close')) closeSim();
-  else if (e.target.closest('.sim-reset')) { simPts = { fp: null, p2: null }; openSim(simKey, true); }
+  if (!b) return;
+  const k = b.getAttribute('data-sim');
+  if (simKey === k) closeSim(); else openSim(k);
 });
 
 /* ---------- settings ---------- */
