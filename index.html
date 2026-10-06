@@ -59,6 +59,15 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
 }
 .ev.hw{top:2px; font-weight:600} .ev.lw{bottom:2px}
 .now{position:absolute; top:0; bottom:0; width:2px; background:var(--mark)}
+.simbar{position:absolute; top:44%; height:6px; background:var(--route); border-radius:3px}
+.simbar span{
+  position:absolute; left:100%; top:50%; transform:translateY(-50%); margin:0 .3rem;
+  font-size:.78rem; font-weight:600; line-height:1; color:var(--route); white-space:nowrap;
+  text-shadow:0 0 3px var(--paper),0 0 3px var(--paper),0 0 3px var(--paper);
+}
+.simbar.flip span{left:auto; right:100%}
+.simbar.late{background:var(--strong)}
+.simbar.late span{color:var(--strong)}
 
 .wind{display:grid; grid-template-columns:repeat(8,1fr); gap:1px; margin-top:2px}
 .w{padding:.15rem 0; text-align:center; font-size:.85rem; border-radius:2px; color:var(--muted)}
@@ -138,11 +147,18 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
   transform:translateX(-100%); visibility:hidden;
   transition:transform .2s, visibility 0s .2s;
 }
+.side::before{content:""; display:block; position:sticky; top:-3.6rem; z-index:1; height:3.6rem; margin:-3.6rem -1rem 0; background:var(--paper)}
 .side-open .side{transform:none; visibility:visible; transition:transform .2s}
 @media (min-width:64rem){ .side-open{padding-left:17rem} }
 @media (prefers-reduced-motion:reduce){ body,.side,.side-toggle::before{transition:none} }
 .fields{display:grid; gap:.9rem}
 label{display:block; font-size:.92rem}
+label span{display:block}
+.fields input{display:inline-block; vertical-align:middle}
+.delta{margin-left:.5rem; color:var(--strong); font-weight:600; white-space:nowrap}
+.side button{display:block}
+#massage{margin-top:.6rem}
+.massage-note{margin:.6rem 0 0; font-size:.88rem; color:var(--muted)}
 input{
   display:block; width:6rem; margin-top:.2rem; padding:.3rem .4rem;
   font:inherit; color:inherit; background:transparent;
@@ -163,18 +179,20 @@ footer p{margin:.4rem 0}
 <button id="sideToggle" class="side-toggle" type="button" aria-expanded="false" aria-controls="side">Limits and timings</button>
 <aside id="side" class="side" aria-label="Limits and timings">
   <div class="fields">
-    <label>Lightest wind worth going, knots <input type="number" id="windMin" min="0" max="20"></label>
-    <label>Strongest steady wind, knots <input type="number" id="windMax" min="5" max="30"></label>
-    <label>Strongest gust, knots <input type="number" id="gustMax" min="5" max="40"></label>
-    <label>Lowest high tide worth going, metres <input type="number" id="tideMin" min="0" max="7" step="0.1"></label>
-    <label>Launch this long before high water, minutes <input type="number" id="lead" min="0" max="300" step="15"></label>
-    <label>Be back this long after high water, minutes <input type="number" id="ret" min="30" max="360" step="15"></label>
-    <label>Highest waves, metres <input type="number" id="waveMax" min="0" max="3" step="0.1"></label>
-    <label>Highest swell, metres <input type="number" id="swellMax" min="0" max="3" step="0.1"></label>
-    <label>Longest swell period before it is marginal, seconds <input type="number" id="periodMax" min="4" max="20"></label>
-    <label>High water at Patch is this much later than predicted, minutes <input type="number" id="offset" min="-120" max="180" step="5"></label>
+    <label><span>Lightest wind worth going, knots</span><input type="number" id="windMin" min="0" max="20"><b class="delta" id="d-windMin"></b></label>
+    <label><span>Strongest steady wind, knots</span><input type="number" id="windMax" min="5" max="30"><b class="delta" id="d-windMax"></b></label>
+    <label><span>Strongest gust, knots</span><input type="number" id="gustMax" min="5" max="40"><b class="delta" id="d-gustMax"></b></label>
+    <label><span>Lowest high tide worth going, metres</span><input type="number" id="tideMin" min="0" max="7" step="0.1"><b class="delta" id="d-tideMin"></b></label>
+    <label><span>Launch this long before high water, minutes</span><input type="number" id="lead" min="0" max="300" step="15"><b class="delta" id="d-lead"></b></label>
+    <label><span>Be back this long after high water, minutes</span><input type="number" id="ret" min="30" max="360" step="15"><b class="delta" id="d-ret"></b></label>
+    <label><span>Highest waves, metres</span><input type="number" id="waveMax" min="0" max="3" step="0.1"><b class="delta" id="d-waveMax"></b></label>
+    <label><span>Highest swell, metres</span><input type="number" id="swellMax" min="0" max="3" step="0.1"><b class="delta" id="d-swellMax"></b></label>
+    <label><span>Longest swell period before it is marginal, seconds</span><input type="number" id="periodMax" min="4" max="20"><b class="delta" id="d-periodMax"></b></label>
+    <label><span>High water at Patch is this much later than predicted, minutes</span><input type="number" id="offset" min="-120" max="180" step="5"><b class="delta" id="d-offset"></b></label>
   </div>
   <button id="reset" type="button">Reset to defaults</button>
+  <button id="massage" type="button">Massage</button>
+  <p id="massageNote" class="massage-note" aria-live="polite"></p>
 </aside>
 
 <div class="page">
@@ -325,6 +343,7 @@ function prepTide(t) {
     return m;
   };
   const m = { HW: fill('HW'), LW: fill('LW') };
+  t.events.forEach(e => { e.h = Math.round(e.h * 10) / 10; });   // tide tables work to 0.1 m
   const flip = e => (e.type === 'HW' ? 'LW' : 'HW');
   const half = 372.5 * MIN;
   for (let k = 0; k < 2; k++) {
@@ -350,6 +369,29 @@ function tideAt(ts) {
 }
 
 /* ---------- the judgement ---------- */
+// Wind, rain, waves and swell between two times, as the decider sees them.
+function conditions(launch, back) {
+  const inWin = h => h.t >= launch - 30 * MIN && h.t <= back + 30 * MIN;
+  const hrs = hours.filter(inWin);
+  if (!hrs.length) return null;
+  const c = {};
+  c.wind = Math.round(mean(hrs.map(h => h.wind)));
+  c.gust = Math.round(Math.max(...hrs.map(h => h.gust)));
+  const rad = hrs.map(h => h.dir * Math.PI / 180);
+  c.dir = (Math.atan2(mean(rad.map(Math.sin)), mean(rad.map(Math.cos))) * 180 / Math.PI + 360) % 360;
+  c.rain = hrs.reduce((s, h) => s + h.rain, 0);
+  const sea = seas.filter(inWin);
+  if (sea.length) {
+    c.wave = Math.max(...sea.map(x => x.wave));
+    const sw = sea.filter(x => x.swell != null);
+    if (sw.length) {
+      const top = sw.reduce((p, q) => (q.swell > p.swell ? q : p));
+      c.swell = top.swell; c.swellPeriod = top.swellPeriod || 0;
+    }
+  }
+  return c;
+}
+
 /* A window is built around each high water: launch a set time before it and be
    back a set time after. It is good only if the tide is high enough, it is light,
    and the wind, waves and swell are all inside the limits. */
@@ -362,23 +404,9 @@ function buildWindows() {
     if (!sn || back > lastHour + 60 * MIN) return null;
     const w = { hw, launch, back, key, h: e.h, reasons: [], status: 'go' };
     w.dark = back <= sn.rise || launch >= sn.set;
-    const inWin = h => h.t >= launch - 30 * MIN && h.t <= back + 30 * MIN;
-    const hrs = hours.filter(inWin);
-    if (!hrs.length) return null;
-    w.wind = Math.round(mean(hrs.map(h => h.wind)));
-    w.gust = Math.round(Math.max(...hrs.map(h => h.gust)));
-    const rad = hrs.map(h => h.dir * Math.PI / 180);
-    w.dir = (Math.atan2(mean(rad.map(Math.sin)), mean(rad.map(Math.cos))) * 180 / Math.PI + 360) % 360;
-    w.rain = hrs.reduce((s, h) => s + h.rain, 0);
-    const sea = seas.filter(inWin);
-    if (sea.length) {
-      w.wave = Math.max(...sea.map(x => x.wave));
-      const sw = sea.filter(x => x.swell != null);
-      if (sw.length) {
-        const top = sw.reduce((p, q) => (q.swell > p.swell ? q : p));
-        w.swell = top.swell; w.swellPeriod = top.swellPeriod || 0;
-      }
-    }
+    const st = conditions(launch, back);
+    if (!st) return null;
+    Object.assign(w, st);
 
     const bad = r => { w.status = 'no'; w.reasons.push(r); };
     const warn = r => { if (w.status === 'go') w.status = 'maybe'; w.reasons.push(r); };
@@ -848,6 +876,7 @@ function closeSim() {
   if (!simKey) return;
   const box = $('sim-' + simKey), btn = document.querySelector(`[data-sim="${simKey}"]`);
   if (box) { box.hidden = true; box.innerHTML = ''; }
+  document.querySelectorAll('.simbar').forEach(el => el.remove());
   if (btn) { btn.setAttribute('aria-expanded', 'false'); btn.textContent = 'Simulate'; btn.classList.remove('dirty'); }
   simKey = null;
 }
@@ -893,6 +922,18 @@ function openSim(key, quiet) {
     `This is a sketch of what the day allows, not a passage plan. The coastline is simplified (© OpenStreetMap contributors), ` +
     `no depths or sandbanks are modelled, and the stream and boat speeds are estimates. Each circle is a tack.</p>`;
   box.hidden = false;
+
+  // On the day's strip, a bar from the launch time to when this route gets home.
+  const track = box.parentElement.querySelector('.track');
+  document.querySelectorAll('.simbar').forEach(el => el.remove());
+  if (plan && track) {
+    const a = lp(w.launch), z = lp(r.end);
+    const x0 = a.key === key ? a.mins : 0, x1 = z.key === key ? z.mins : 1440;
+    const word = plan.ok ? 'Home' : plan.why === 'stuck' ? 'Stalls' : 'Still out';
+    track.insertAdjacentHTML('beforeend',
+      `<div class="simbar${plan.home ? '' : ' late'}${x1 > 1200 ? ' flip' : ''}" style="left:${pct(x0)};width:${pct(Math.max(3, x1 - x0))}">` +
+      `<span>${word} ${hm(r.end)}</span></div>`);
+  }
 
   const q = s => box.querySelector(s);
   const live = q('.route.live'), boat = q('.boat'), arrow = q('.rose-arrow'), windlbl = q('.windlbl');
@@ -1007,6 +1048,17 @@ $('days').addEventListener('click', e => {
 });
 
 /* ---------- settings ---------- */
+let massaged = false;
+const UNIT = { windMin: 'knot', windMax: 'knot', gustMax: 'knot', tideMin: 'm', lead: 'minute', ret: 'minute', waveMax: 'm', swellMax: 'm', periodMax: 'second' };
+
+// After a massage, show in red how far each limit sits from its default.
+function showDeltas() {
+  Object.keys(UNIT).forEach(k => {
+    const d = Math.round((S[k] - DEFAULTS[k]) * 10) / 10, n = Math.abs(d), u = UNIT[k];
+    $('d-' + k).textContent = massaged && d ? `${d > 0 ? '+' : '\u2212'}${n} ${u === 'm' ? 'm' : n === 1 ? u : u + 's'}` : '';
+  });
+}
+
 Object.keys(DEFAULTS).forEach(k => {
   const el = $(k);
   el.value = S[k];
@@ -1015,15 +1067,59 @@ Object.keys(DEFAULTS).forEach(k => {
     const v = parseFloat(el.value);
     if (isNaN(v)) { if (commit) el.value = S[k]; return; }
     if (v === S[k]) return;
-    S[k] = v; writeStore(); render();
+    S[k] = v; writeStore(); render(); showDeltas();
   };
   el.addEventListener('input', () => apply(false));
   el.addEventListener('change', () => apply(true));
 });
-$('reset').addEventListener('click', () => {
-  Object.assign(S, DEFAULTS);
+function setAll(values) {
+  Object.assign(S, values);
   Object.keys(DEFAULTS).forEach(k => { $(k).value = S[k]; });
-  writeStore(); render();
+  writeStore(); render(); showDeltas();
+}
+$('reset').addEventListener('click', () => {
+  massaged = false; $('massageNote').textContent = '';
+  setAll(DEFAULTS);
+});
+
+/* Massage: start from the defaults and move them only as far as it takes for one
+   high water this week to give a daylight window of at least 120 minutes that
+   passes. Of the candidates, the one needing the least movement is used. */
+$('massage').addEventListener('click', () => {
+  const note = $('massageNote');
+  if (!tide || !hours.length) { note.textContent = 'There is no forecast loaded to work from.'; return; }
+  const D = DEFAULTS, lastHour = hours[hours.length - 1].t, now = Date.now();
+  const up = (v, d) => (v == null || v <= d ? d : Math.ceil(v * 10 - 1e-6) / 10);
+  let best = null;
+  tide.events.filter(e => e.type === 'HW' && !e.pad).forEach(e => {
+    const hw = e.t + S.offset * MIN, sn = sun[lp(hw).key];
+    if (!sn) return;
+    // The longest window, up to the default, that fits between sunrise and half an hour before sunset.
+    const lead = Math.floor(Math.min(D.lead, (hw - sn.rise) / MIN) / 5) * 5;
+    const ret = Math.floor(Math.min(D.ret, (sn.set - hw) / MIN - 30) / 5) * 5;
+    if (lead < 0 || ret < 30 || lead + ret < 120) return;
+    const launch = hw - lead * MIN, back = hw + ret * MIN;
+    if (back > lastHour + 60 * MIN || back - 60 * MIN < now) return;
+    const c = conditions(launch, back);
+    if (!c) return;
+    const v = {
+      lead, ret,
+      windMin: Math.min(D.windMin, c.wind), windMax: Math.max(D.windMax, c.wind), gustMax: Math.max(D.gustMax, c.gust),
+      tideMin: e.h >= D.tideMin ? D.tideMin : Math.floor(e.h * 10 + 1e-6) / 10,
+      waveMax: up(c.wave, D.waveMax), swellMax: up(c.swell, D.swellMax),
+      periodMax: c.swell > 0.2 ? Math.max(D.periodMax, Math.ceil(c.swellPeriod)) : D.periodMax
+    };
+    // How far the limits had to move, in rough steps of equal weight.
+    const cost = (D.lead - lead + D.ret - ret) / 15 + (D.windMin - v.windMin) + (v.windMax - D.windMax) + (v.gustMax - D.gustMax) +
+      (D.tideMin - v.tideMin) * 10 + (v.waveMax - D.waveMax) * 15 + (v.swellMax - D.swellMax) * 15 + (v.periodMax - D.periodMax);
+    if (!best || cost < best.cost - 1e-9) best = { cost, v, hw };
+  });
+  if (!best) { note.textContent = 'No high water this week leaves 120 minutes of daylight, so there is nothing to massage towards.'; return; }
+  massaged = true;
+  setAll(Object.assign({}, D, { offset: S.offset }, best.v));
+  note.textContent = best.cost < 1e-9
+    ? `Nothing needed to move. The defaults already give a window on ${dayFmt.format(best.hw)}.`
+    : `Set for ${dayFmt.format(best.hw)}, high water ${hm(best.hw)}. Red shows how far each limit had to move from its default.`;
 });
 
 /* ---------- sidebar ---------- */
