@@ -183,8 +183,9 @@ footer p{margin:.4rem 0}
     <label><span>Strongest steady wind, knots</span><input type="number" id="windMax" min="5" max="30"><b class="delta" id="d-windMax"></b></label>
     <label><span>Strongest gust, knots</span><input type="number" id="gustMax" min="5" max="40"><b class="delta" id="d-gustMax"></b></label>
     <label><span>Lowest high tide worth going, metres</span><input type="number" id="tideMin" min="0" max="7" step="0.1"><b class="delta" id="d-tideMin"></b></label>
-    <label><span>Launch this long before high water, minutes</span><input type="number" id="lead" min="0" max="300" step="15"><b class="delta" id="d-lead"></b></label>
-    <label><span>Be back this long after high water, minutes</span><input type="number" id="ret" min="30" max="360" step="15"><b class="delta" id="d-ret"></b></label>
+    <label><span>Launch at most this long before high water, minutes</span><input type="number" id="lead" min="0" max="300" step="15"><b class="delta" id="d-lead"></b></label>
+    <label><span>Be back at most this long after high water, minutes</span><input type="number" id="ret" min="30" max="360" step="15"><b class="delta" id="d-ret"></b></label>
+    <label><span>Shortest window worth going, minutes</span><input type="number" id="slotMin" min="30" max="360" step="15"><b class="delta" id="d-slotMin"></b></label>
     <label><span>Highest waves, metres</span><input type="number" id="waveMax" min="0" max="3" step="0.1"><b class="delta" id="d-waveMax"></b></label>
     <label><span>Highest swell, metres</span><input type="number" id="swellMax" min="0" max="3" step="0.1"><b class="delta" id="d-swellMax"></b></label>
     <label><span>Longest swell period before it is marginal, seconds</span><input type="number" id="periodMax" min="4" max="20"><b class="delta" id="d-periodMax"></b></label>
@@ -228,8 +229,8 @@ const TZ = 'Europe/London';
 const MIN = 60000;
 const SEA = { lat: 52.13, lon: -4.72 };      // open water in the bay, for waves and the fallback tide
 const MODEL_DATUM = 2.6;                     // assumed mean sea level above chart datum at Port Cardigan, metres
-const DEFAULTS = { windMin: 4, windMax: 14, gustMax: 20, tideMin: 3.6, lead: 120, ret: 120, waveMax: 0.7, swellMax: 0.5, periodMax: 10, offset: 0 };
-const STORE = 'patch-launch-2';
+const DEFAULTS = { windMin: 4, windMax: 14, gustMax: 20, tideMin: 3.6, lead: 120, ret: 120, slotMin: 120, waveMax: 0.7, swellMax: 0.5, periodMax: 10, offset: 0 };
+const STORE = 'patch-launch-3';
 
 const S = Object.assign({}, DEFAULTS, readStore());
 let hours = [], seas = [], sun = {}, tide = null, river = {}, weatherError = false;
@@ -392,18 +393,22 @@ function conditions(launch, back) {
   return c;
 }
 
-/* A window is built around each high water: launch a set time before it and be
-   back a set time after. It is good only if the tide is high enough, it is light,
-   and the wind, waves and swell are all inside the limits. */
+/* A window is built around each high water: launch no more than a set time before
+   it and be back no more than a set time after, trimmed to daylight. It is good only
+   if the tide is high enough, enough of the window is left, and the wind, waves and
+   swell are all inside the limits. A trip can always be shorter than the window. */
 function buildWindows() {
   if (!tide || !hours.length) return [];
   const lastHour = hours[hours.length - 1].t;
   return tide.events.filter(e => e.type === 'HW' && !e.pad).map(e => {
-    const hw = e.t + S.offset * MIN, launch = hw - S.lead * MIN, back = hw + S.ret * MIN;
-    const key = lp(hw).key, sn = sun[key];
-    if (!sn || back > lastHour + 60 * MIN) return null;
-    const w = { hw, launch, back, key, h: e.h, reasons: [], status: 'go' };
-    w.dark = back <= sn.rise || launch >= sn.set;
+    const hw = e.t + S.offset * MIN, key = lp(hw).key, sn = sun[key];
+    if (!sn) return null;
+    // The two timings are the most you would allow. Daylight trims the window further:
+    // no earlier than sunrise, and home half an hour before sunset.
+    const first = hw - S.lead * MIN, last = hw + S.ret * MIN;
+    const launch = Math.max(first, sn.rise), back = Math.min(last, sn.set - 30 * MIN);
+    if (back - launch < 15 * MIN || back > lastHour + 60 * MIN) return null;   // dark, or beyond the forecast
+    const w = { hw, launch, back, key, h: e.h, reasons: [], status: 'go', atDawn: launch > first, atDusk: back < last };
     const st = conditions(launch, back);
     if (!st) return null;
     Object.assign(w, st);
@@ -411,8 +416,8 @@ function buildWindows() {
     const bad = r => { w.status = 'no'; w.reasons.push(r); };
     const warn = r => { if (w.status === 'go') w.status = 'maybe'; w.reasons.push(r); };
     if (w.h < S.tideMin) bad(`high water is only ${w.h.toFixed(1)} m, under your ${S.tideMin} m`);
-    if (launch < sn.rise) bad('starts before sunrise');
-    if (back > sn.set - 30 * MIN) bad('runs into dusk');
+    const slot = Math.round((back - launch) / MIN);
+    if (slot < S.slotMin) bad(`only ${slot} minutes of daylight in the window, under your ${S.slotMin}`);
     if (w.wind > S.windMax) bad(`wind over your ${S.windMax} knot limit`);
     else if (w.gust > S.gustMax) bad(`gusts over your ${S.gustMax} knot limit`);
     else if (w.wind < S.windMin) warn('very light wind');
@@ -530,7 +535,7 @@ function renderDays(wins, now) {
 
     const label = { go: 'Good', maybe: 'Marginal', no: 'No' };
     const list = dayWins.length ? dayWins.map(w =>
-      `<li class="${w.status}"><b>${label[w.status]}.</b> Launch ${hm(w.launch)}, high water ${hm(w.hw)} at ${w.h.toFixed(1)} m, back by ${hm(w.back)}. ` +
+      `<li class="${w.status}"><b>${label[w.status]}.</b> Launch ${hm(w.launch)}${w.atDawn ? ' (sunrise)' : ''}, high water ${hm(w.hw)} at ${w.h.toFixed(1)} m, back by ${hm(w.back)}${w.atDusk ? ' (dusk)' : ''}. ` +
       `${windText(w)}.${seaText(w)}${w.reasons.length ? ' ' + esc(w.reasons.join('; ')).replace(/^./, c => c.toUpperCase()) + '.' : ''}</li>`
     ).join('') : '<li class="no">High water falls in the dark.</li>';
 
@@ -1049,7 +1054,7 @@ $('days').addEventListener('click', e => {
 
 /* ---------- settings ---------- */
 let massaged = false;
-const UNIT = { windMin: 'knot', windMax: 'knot', gustMax: 'knot', tideMin: 'm', lead: 'minute', ret: 'minute', waveMax: 'm', swellMax: 'm', periodMax: 'second' };
+const UNIT = { windMin: 'knot', windMax: 'knot', gustMax: 'knot', tideMin: 'm', lead: 'minute', ret: 'minute', slotMin: 'minute', waveMax: 'm', swellMax: 'm', periodMax: 'second' };
 
 // After a massage, show in red how far each limit sits from its default.
 function showDeltas() {
@@ -1082,9 +1087,10 @@ $('reset').addEventListener('click', () => {
   setAll(DEFAULTS);
 });
 
-/* Massage: start from the defaults and move them only as far as it takes for one
-   high water this week to give a daylight window of at least 120 minutes that
-   passes. Of the candidates, the one needing the least movement is used. */
+/* Massage: start from the defaults and move the limits only as far as it takes for
+   one high water this week to give a daylight window of at least the shortest slot
+   that passes. The timings are left alone, since they are maximums and daylight
+   trims them anyway. Of the candidates, the one needing the least movement is used. */
 $('massage').addEventListener('click', () => {
   const note = $('massageNote');
   if (!tide || !hours.length) { note.textContent = 'There is no forecast loaded to work from.'; return; }
@@ -1094,27 +1100,24 @@ $('massage').addEventListener('click', () => {
   tide.events.filter(e => e.type === 'HW' && !e.pad).forEach(e => {
     const hw = e.t + S.offset * MIN, sn = sun[lp(hw).key];
     if (!sn) return;
-    // The longest window, up to the default, that fits between sunrise and half an hour before sunset.
-    const lead = Math.floor(Math.min(D.lead, (hw - sn.rise) / MIN) / 5) * 5;
-    const ret = Math.floor(Math.min(D.ret, (sn.set - hw) / MIN - 30) / 5) * 5;
-    if (lead < 0 || ret < 30 || lead + ret < 120) return;
-    const launch = hw - lead * MIN, back = hw + ret * MIN;
+    // The default window, trimmed to daylight, has to leave the shortest slot worth going.
+    const launch = Math.max(hw - D.lead * MIN, sn.rise), back = Math.min(hw + D.ret * MIN, sn.set - 30 * MIN);
+    if (back - launch < D.slotMin * MIN) return;
     if (back > lastHour + 60 * MIN || back - 60 * MIN < now) return;
     const c = conditions(launch, back);
     if (!c) return;
     const v = {
-      lead, ret,
       windMin: Math.min(D.windMin, c.wind), windMax: Math.max(D.windMax, c.wind), gustMax: Math.max(D.gustMax, c.gust),
       tideMin: e.h >= D.tideMin ? D.tideMin : Math.floor(e.h * 10 + 1e-6) / 10,
       waveMax: up(c.wave, D.waveMax), swellMax: up(c.swell, D.swellMax),
       periodMax: c.swell > 0.2 ? Math.max(D.periodMax, Math.ceil(c.swellPeriod)) : D.periodMax
     };
     // How far the limits had to move, in rough steps of equal weight.
-    const cost = (D.lead - lead + D.ret - ret) / 15 + (D.windMin - v.windMin) + (v.windMax - D.windMax) + (v.gustMax - D.gustMax) +
+    const cost = (D.windMin - v.windMin) + (v.windMax - D.windMax) + (v.gustMax - D.gustMax) +
       (D.tideMin - v.tideMin) * 10 + (v.waveMax - D.waveMax) * 15 + (v.swellMax - D.swellMax) * 15 + (v.periodMax - D.periodMax);
     if (!best || cost < best.cost - 1e-9) best = { cost, v, hw };
   });
-  if (!best) { note.textContent = 'No high water this week leaves 120 minutes of daylight, so there is nothing to massage towards.'; return; }
+  if (!best) { note.textContent = `No high water this week leaves ${D.slotMin} minutes of daylight, so there is nothing to massage towards.`; return; }
   massaged = true;
   setAll(Object.assign({}, D, { offset: S.offset }, best.v));
   note.textContent = best.cost < 1e-9
