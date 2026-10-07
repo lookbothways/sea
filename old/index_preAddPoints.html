@@ -89,11 +89,8 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
   width:max(100%,70vw); margin:1rem 0 0 calc((100% - max(100%,70vw)) / 2);
   padding:1rem; background:var(--paper); border:1px solid var(--rule); border-radius:3px;
 }
-.sim-head{display:flex; flex-wrap:wrap; align-items:flex-start; gap:.5rem .8rem; margin-bottom:.7rem}
-.sim-result{flex:1 1 22rem; margin:0; font-size:1.05rem}
-.sim-btns{display:flex; flex-wrap:wrap; gap:.4rem}
-.sim-add[aria-pressed="true"]{background:var(--ink); border-color:var(--ink); color:var(--paper)}
-.map.adding{cursor:crosshair}
+.sim-head{display:flex; align-items:flex-start; gap:.6rem; margin-bottom:.7rem}
+.sim-result{flex:1; margin:0; font-size:1.05rem}
 .sim-head button{margin:0; padding:.1rem .7rem; font-size:.9rem; white-space:nowrap}
 .map{position:relative; aspect-ratio:1000/565; background:var(--sea); border-radius:3px; overflow:hidden}
 .map svg{position:absolute; inset:0; width:100%; height:100%}
@@ -115,7 +112,7 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
 .map{user-select:none; -webkit-user-select:none}
 .xh{
   position:absolute; width:28px; height:28px; margin:0; padding:0; transform:translate(-50%,-50%);
-  color:var(--mark); border:0; border-radius:50%; cursor:grab; touch-action:manipulation;
+  color:var(--mark); border:0; border-radius:50%; cursor:grab; touch-action:none;
   background:radial-gradient(circle,transparent 5px,currentColor 5px,currentColor 6.5px,transparent 6.5px);
 }
 .xh::before,.xh::after{content:""; position:absolute; background:currentColor}
@@ -807,32 +804,26 @@ function simulate(wps, t0, tMax, riverKn) {
 }
 
 /* The route. Untouched, it is the standard loop round Cardigan Island, taken
-   whichever way round is quicker. Once a crosshair has been moved or added it runs
-   from Patch to the furthest point, then through the numbered points in order, and home. */
-let simPts = { fp: null, p2: null, more: [] }, simAdding = false;
-const touched = () => !!(simPts.fp || simPts.p2 || simPts.more.length);
+   whichever way round is quicker. Once a crosshair has been moved it runs from
+   Patch to the furthest point, through point 2 if that has been placed, and home. */
+let simPts = { fp: null, p2: null };
 
 function planRoute(w) {
   const riverKn = Math.min(2, (river[w.key] || 0) / 120), tMax = w.back + 90 * MIN;
   const run = (pts, fpIndex, name) => Object.assign(simulate(makeRoute(pts), w.launch, tMax, riverKn), { pts, fpIndex, name });
   let r;
-  if (!touched()) {
+  if (!simPts.fp && !simPts.p2) {
     const a = run(WAY_OUT.concat(named(['I1', 'I2', 'I3', 'I4', 'I5', 'K', 'I6', 'S2']), WAY_HOME), WAY_OUT.length + 2, 'Round Cardigan Island');
     const b = run(WAY_OUT.concat(named(['I6', 'K', 'I5', 'I4', 'I3', 'I2', 'I1', 'S2']), WAY_HOME), WAY_OUT.length + 4, 'Round Cardigan Island');
     r = b.ok && (!a.ok || b.end < a.end) ? b : a;
   } else {
-    // Patch, the furthest point, then point 2 if it has been placed, then points 3, 4 and so on, then home.
-    const stops = [NODE.S0, simPts.fp || NODE.I3].concat(simPts.p2 ? [simPts.p2] : [], simPts.more, [NODE.S0]);
-    const used = new Set();
-    let pts = [NODE.S0], fpIndex = 0;
-    for (let i = 1; i < stops.length; i++) {
-      const leg = shortest(stops[i - 1], stops[i], used);
-      if (!leg) return null;
-      leg.slice(1).forEach((q, j) => used.add(segKey(leg[j], q)));
-      pts = pts.concat(leg.slice(1));
-      if (i === 1) fpIndex = pts.length - 1;
-    }
-    r = run(pts, fpIndex, 'Your route');
+    const fp = simPts.fp || NODE.I3, out = shortest(NODE.S0, fp);
+    if (!out) return null;
+    const used = new Set(out.slice(1).map((p, i) => segKey(out[i], p)));
+    let back = simPts.p2 ? shortest(fp, simPts.p2, used) : shortest(fp, NODE.S0, used);
+    if (back && simPts.p2) { const last = shortest(simPts.p2, NODE.S0, used); back = last && back.concat(last.slice(1)); }
+    if (!back) return null;
+    r = run(out.concat(back.slice(1)), out.length - 1, 'Your route');
   }
   r.home = r.ok && r.end <= w.back;
   return r;
@@ -892,7 +883,7 @@ function closeSim() {
   if (box) { box.hidden = true; box.innerHTML = ''; }
   document.querySelectorAll('.simbar').forEach(el => el.remove());
   if (btn) { btn.setAttribute('aria-expanded', 'false'); btn.textContent = 'Simulate'; btn.classList.remove('dirty'); }
-  simKey = null; simAdding = false;
+  simKey = null;
 }
 
 function openSim(key, quiet) {
@@ -907,12 +898,14 @@ function openSim(key, quiet) {
   const path = r.path, n = path.length, t0 = path[0].t, total = r.end - t0;
   const pt = p => vx(p) + ',' + vy(p);
   const pos = l => `left:${((l[1] - MAPB.w) / (MAPB.e - MAPB.w) * 100).toFixed(2)}%;top:${((MAPB.n - l[2]) / (MAPB.n - MAPB.s) * 100).toFixed(2)}%`;
+  const at = { fp: simPts.fp || (plan ? plan.pts[plan.fpIndex] : NODE.I3) };
+  at.p2 = simPts.p2 || halfWay(plan ? plan.pts.slice(plan.fpIndex) : [at.fp, S0]);
+
   box.innerHTML =
     `<div class="sim-head"><p class="sim-result">${esc(simText(plan, w))}</p>` +
-    `<span class="sim-btns"><button type="button" class="sim-again" hidden>Resimulate</button>` +
-    `<button type="button" class="sim-add" aria-pressed="false">Add more crosshairs</button>` +
-    `<button type="button" class="sim-reset"${touched() ? '' : ' hidden'}>Reset route</button>` +
-    `<button type="button" class="sim-close">Close</button></span></div>` +
+    `<button type="button" class="sim-again" hidden>Resimulate</button>` +
+    `<button type="button" class="sim-reset"${simPts.fp || simPts.p2 ? '' : ' hidden'}>Reset route</button>` +
+    `<button type="button" class="sim-close">Close</button></div>` +
     `<div class="map"><svg viewBox="0 0 ${VW} ${VH.toFixed(1)}" role="img" aria-label="Map of the Teifi estuary and Cardigan Island with the simulated route">` +
       `<path class="land" d="${LAND.map(landPath).join(' ')}"/>` +
       `<path class="route ghost" d="${path.map((p, i) => (i ? 'L' : 'M') + pt(p)).join(' ')}"/><path class="route live" d=""/>` +
@@ -924,12 +917,13 @@ function openSim(key, quiet) {
     `</svg>` +
     LABELS.map(l => `<span class="lbl ${l[3]}" style="${pos(l)}">${l[0]}</span>`).join('') +
     `<span class="lbl windlbl"></span><span class="lbl scalelbl">1 km</span>` +
-    `</div>` +
+    `<button type="button" class="xh" data-pt="fp" aria-label="Furthest point. Drag it, or use the arrow keys, to move it."><span>Furthest point</span></button>` +
+    `<button type="button" class="xh${simPts.p2 ? '' : ' auto'}" data-pt="p2" aria-label="Point 2, on the way home. Drag it, or use the arrow keys, to move it."><span>Point 2</span></button></div>` +
     `<div class="sim-ctl"><button type="button" class="sim-play">Play</button>` +
     `<input type="range" min="0" max="${Math.ceil(total / MIN)}" step="1" value="0" aria-label="Minutes since launch">` +
     `<output class="sim-time"></output></div>` +
     `<p class="sim-read"><span>Wind <b></b></span><span>Stream <b></b></span><span>Boat <b></b></span><span>Tacks <b></b></span></p>` +
-    `<p class="sim-note"><span class="sim-hint" aria-live="polite"></span> ` +
+    `<p class="sim-note"><span class="sim-hint" aria-live="polite">Drag a crosshair to change the route, then press Resimulate.</span> ` +
     `This is a sketch of what the day allows, not a passage plan. The coastline is simplified (© OpenStreetMap contributors), ` +
     `no depths or sandbanks are modelled, and the stream and boat speeds are estimates. Each circle is a tack.</p>`;
   box.hidden = false;
@@ -991,115 +985,59 @@ function openSim(key, quiet) {
   playBtn.addEventListener('click', () => (playing ? stop() : play()));
   slider.addEventListener('input', () => { stop(); T = Math.min(total, slider.value * MIN); frame(); });
 
-  /* Crosshairs. A tap or click on the map moves the nearest one there, or adds a new
-     one while adding is switched on. With a mouse they can also be dragged. Nothing
-     is recalculated until Resimulate is pressed. Point 2 is only a suggestion, half
-     way to the next stop, until it has been moved itself. */
-  const mapEl = q('.map'), hint = q('.sim-hint'), addBtn = q('.sim-add');
-  const fpPos = () => simPts.fp || NODE.I3;
-  let ghost = null, dragEnd = 0;
-  const setGhost = () => {
-    if (simPts.p2) { ghost = null; return; }
-    const next = simPts.more[0] || S0, way = shortest(fpPos(), next);
-    ghost = halfWay(way || [fpPos(), next]);
+  /* Crosshairs. Nothing is recalculated until Resimulate is pressed. Point 2 keeps
+     to the middle of the way home until it has been moved itself. */
+  const mapEl = q('.map'), hint = q('.sim-hint'), HINT = hint.textContent;
+  const xh = { fp: q('[data-pt="fp"]'), p2: q('[data-pt="p2"]') };
+  const put = (k, p) => {
+    at[k] = p;
+    xh[k].style.left = (p.x / MW * 100).toFixed(2) + '%';
+    xh[k].style.top = ((MH - p.y) / MH * 100).toFixed(2) + '%';
   };
-  if (touched()) setGhost(); else ghost = halfWay(plan ? plan.pts.slice(plan.fpIndex) : [fpPos(), S0]);
-
-  const items = () => [{ k: 'fp', label: 'Furthest point', p: fpPos() }, { k: 'p2', label: 'Point 2', p: simPts.p2 || ghost, auto: !simPts.p2 }]
-    .concat(simPts.more.map((p, i) => ({ k: i, label: 'Point ' + (i + 3), p })));
-  const place = (el, p) => {
-    el.style.left = (p.x / MW * 100).toFixed(2) + '%';
-    el.style.top = ((MH - p.y) / MH * 100).toFixed(2) + '%';
+  const follow = () => {
+    if (simPts.p2) return;
+    const back = shortest(at.fp, S0);
+    if (back) put('p2', halfWay(back));
   };
-  const toMap = e => {
-    const rc = mapEl.getBoundingClientRect();
-    const fx = Math.max(0, Math.min(1, (e.clientX - rc.left) / rc.width)), fy = Math.max(0, Math.min(1, (e.clientY - rc.top) / rc.height));
-    return { x: fx * MW, y: (1 - fy) * MH };
-  };
-  const say = () => {
-    hint.textContent = simAdding ? 'Tap the map to add a crosshair.' : 'Tap the map to move the nearest crosshair there, then press Resimulate.';
-    addBtn.textContent = simAdding ? 'Stop adding crosshairs' : 'Add more crosshairs';
-    addBtn.setAttribute('aria-pressed', String(simAdding));
-    mapEl.classList.toggle('adding', simAdding);
-  };
-  const changed = () => {
-    setGhost(); draw(); say();
+  const commit = (k, p, from) => {
+    if (landDist(p) < SAFE + 5) {
+      put(k, from); if (k === 'fp') follow();
+      hint.textContent = 'That spot is on or too close to land.';
+      return;
+    }
+    simPts[k] = { x: p.x, y: p.y }; put(k, p);
+    if (k === 'fp') follow(); else xh.p2.classList.remove('auto');
+    hint.textContent = HINT;
     btn.classList.add('dirty'); q('.sim-again').hidden = false; q('.sim-reset').hidden = false;
   };
-  const onLand = p => {
-    if (landDist(p) >= SAFE + 5) return false;
-    draw(); hint.textContent = 'That spot is on or too close to land.';
-    return true;
-  };
-  function commit(k, p) {             // move an existing crosshair
-    if (onLand(p)) return;
-    if (k === 'fp' || k === 'p2') simPts[k] = { x: p.x, y: p.y }; else simPts.more[k] = { x: p.x, y: p.y };
-    changed();
-  }
-  function addPoint(p) {              // add a new one, which takes over as furthest point if it is further from Patch
-    if (onLand(p)) return;
-    if (simPts.more.length >= 10) { hint.textContent = 'That is as many crosshairs as the map takes.'; return; }
-    const far = fpPos();
-    if (gap(p, S0) > gap(far, S0)) {
-      if (simPts.p2) simPts.more.unshift(simPts.p2);
-      simPts.p2 = { x: far.x, y: far.y }; simPts.fp = { x: p.x, y: p.y };
-    } else simPts.more.push({ x: p.x, y: p.y });
-    changed();
-  }
-  function draw() {
-    mapEl.querySelectorAll('.xh').forEach(el => el.remove());
-    items().forEach(it => {
-      if (!it.p) return;
-      const el = document.createElement('button');
-      el.type = 'button'; el.className = 'xh' + (it.auto ? ' auto' : ''); el.dataset.k = it.k;
-      el.setAttribute('aria-label', `${it.label}. The arrow keys move it.`);
-      el.innerHTML = `<span>${it.label}</span>`;
-      place(el, it.p);
-      let from = null, moved = false, raf = 0;
-      el.addEventListener('pointerdown', e => {
-        if (e.pointerType !== 'mouse' || e.button) return;     // fingers tap, they do not drag
-        from = it.p; moved = false; el.setPointerCapture(e.pointerId); el.classList.add('drag'); stop();
-      });
-      el.addEventListener('pointermove', e => {
-        if (!from) return;
-        const p = toMap(e);
-        if (gap(p, from) / MW * mapEl.getBoundingClientRect().width > 3) moved = true;
-        it.p = p; place(el, p);
-        if (!simPts.p2 && (it.k === 'fp' || it.k === 0) && !raf) raf = requestAnimationFrame(() => {
-          raf = 0;
-          const g = mapEl.querySelector('.xh.auto'), way = shortest(it.k === 'fp' ? it.p : fpPos(), it.k === 0 ? it.p : simPts.more[0] || S0);
-          if (g && way) place(g, halfWay(way));
-        });
-      });
-      const end = () => {
-        if (!from) return;
-        from = null; el.classList.remove('drag'); dragEnd = performance.now();
-        if (moved) commit(it.k, it.p); else draw();
-      };
-      el.addEventListener('pointerup', end);
-      el.addEventListener('pointercancel', end);
-      el.addEventListener('keydown', e => {
-        const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
-        if (!d) return;
-        e.preventDefault(); stop();
-        commit(it.k, { x: Math.max(0, Math.min(MW, it.p.x + d[0] * 50)), y: Math.max(0, Math.min(MH, it.p.y + d[1] * 50)) });
-        const again = mapEl.querySelector(`.xh[data-k="${it.k}"]`);
-        if (again) again.focus();
-      });
-      mapEl.appendChild(el);
+  Object.keys(xh).forEach(k => {
+    const el = xh[k];
+    let from = null, moved = false, raf = 0;
+    put(k, at[k]);
+    el.addEventListener('pointerdown', e => { from = at[k]; moved = false; el.setPointerCapture(e.pointerId); el.classList.add('drag'); stop(); });
+    el.addEventListener('pointermove', e => {
+      if (!from) return;
+      const rc = mapEl.getBoundingClientRect();
+      const fx = Math.max(0, Math.min(1, (e.clientX - rc.left) / rc.width)), fy = Math.max(0, Math.min(1, (e.clientY - rc.top) / rc.height));
+      const p = { x: fx * MW, y: (1 - fy) * MH };
+      if (gap(p, from) / MW * rc.width > 3) moved = true;
+      put(k, p);
+      if (k === 'fp' && !raf) raf = requestAnimationFrame(() => { raf = 0; follow(); });
     });
-  }
-  mapEl.addEventListener('click', e => {
-    if (e.target.closest('.xh') || performance.now() - dragEnd < 300) return;
-    const p = toMap(e);
-    stop();
-    if (simAdding) { addPoint(p); return; }
-    let near = null, best = Infinity;
-    items().forEach(it => { if (it.p && gap(it.p, p) < best) { best = gap(it.p, p); near = it.k; } });
-    commit(near, p);
+    const end = () => {
+      if (!from) return;
+      const f = from; from = null; el.classList.remove('drag');
+      if (moved) commit(k, at[k], f); else put(k, f);
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('keydown', e => {
+      const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
+      if (!d) return;
+      e.preventDefault(); stop();
+      commit(k, { x: Math.max(0, Math.min(MW, at[k].x + d[0] * 50)), y: Math.max(0, Math.min(MH, at[k].y + d[1] * 50)) }, at[k]);
+    });
   });
-  addBtn.addEventListener('click', () => { simAdding = !simAdding; say(); });
-  draw(); say();
 
   frame();
   if (!quiet) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -1111,7 +1049,7 @@ $('days').addEventListener('click', e => {
   if (b) { const k = b.getAttribute('data-sim'); openSim(k, k === simKey); return; }
   if (e.target.closest('.sim-again')) openSim(simKey, true);
   else if (e.target.closest('.sim-close')) closeSim();
-  else if (e.target.closest('.sim-reset')) { simPts = { fp: null, p2: null, more: [] }; simAdding = false; openSim(simKey, true); }
+  else if (e.target.closest('.sim-reset')) { simPts = { fp: null, p2: null }; openSim(simKey, true); }
 });
 
 /* ---------- settings ---------- */
