@@ -921,8 +921,8 @@ function applyLaunch(L, key) {
 
 /* The route. Untouched, it is the standard loop round Cardigan Island, taken
    whichever way round is quicker. Once a crosshair has been moved or added it runs
-   from the launch to the furthest point, then through the numbered points in order, and home. */
-let simPts = { fp: null, p2: null, more: [] }, simAdding = false;
+   from the launch through the numbered points in order, and home. */
+let simPts = { fp: null, p2: null, more: [] }, simAdding = false;   // fp is point 1, more holds points 3 on
 const touched = () => !!(simPts.fp || simPts.p2 || simPts.more.length);
 const RING = ['S2', 'I1', 'I2', 'I3', 'I4', 'I5', 'K', 'I6'];   // the loop round the island
 const pathLen = pts => pts.reduce((s, p, i) => s + (i ? gap(pts[i - 1], p) : 0), 0);
@@ -952,7 +952,7 @@ function planRoute(w) {
     });
     r = b.ok && (!a.ok || b.end < a.end) ? b : a;
   } else {
-    // The launch, the furthest point, then point 2 if it has been placed, then points 3, 4 and so on, then home.
+    // The launch, point 1, then point 2 if it has been placed, then points 3, 4 and so on, then home.
     const stops = [L, simPts.fp || NODE.I3].concat(simPts.p2 ? [simPts.p2] : [], simPts.more, [L]);
     const used = new Set();
     let pts = [L], fpIndex = 0;
@@ -1128,7 +1128,7 @@ function openSim(key, quiet) {
   /* Crosshairs. A tap or click on the map moves the nearest one there, or adds a new
      one while adding is switched on. With a mouse they can also be dragged. Nothing
      is recalculated until Resimulate is pressed. Point 2 is only a suggestion, half
-     way to the next stop, until it has been moved itself.
+     way from point 1 to the next stop, until it has been moved or added.
      The launch crosshair is moved on its own: drag it, or click or tap it to pick it
      up and then click or tap where it should go. It snaps to the nearest shore. */
   const mapEl = q('.map'), hint = q('.sim-hint'), addBtn = q('.sim-add');
@@ -1141,7 +1141,7 @@ function openSim(key, quiet) {
   };
   if (touched()) setGhost(); else ghost = halfWay(plan ? plan.pts.slice(plan.fpIndex) : [fpPos(), S0]);
 
-  const items = () => [{ k: 'fp', label: 'Furthest point', p: fpPos() }, { k: 'p2', label: 'Point 2', p: simPts.p2 || ghost, auto: !simPts.p2 }]
+  const items = () => [{ k: 'fp', label: 'Point 1', p: fpPos() }, { k: 'p2', label: 'Point 2', p: simPts.p2 || ghost, auto: !simPts.p2 }]
     .concat(simPts.more.map((p, i) => ({ k: i, label: 'Point ' + (i + 3), p })));
   const place = (el, p) => {
     el.style.left = (p.x / MW * 100).toFixed(2) + '%';
@@ -1154,7 +1154,7 @@ function openSim(key, quiet) {
   };
   const say = () => {
     hint.textContent = carrying ? 'Now click or tap where you launch from. It snaps to the nearest shore.'
-      : simAdding ? 'Tap the map to add a crosshair.'
+      : simAdding ? 'Tap the map to add the next point.'
       : 'Tap the map to move the nearest crosshair there, or tap the launch crosshair to move the launch, then press Resimulate.';
     addBtn.textContent = simAdding ? 'Stop adding crosshairs' : 'Add more crosshairs';
     addBtn.setAttribute('aria-pressed', String(simAdding));
@@ -1176,14 +1176,10 @@ function openSim(key, quiet) {
     if (k === 'fp' || k === 'p2') simPts[k] = { x: p.x, y: p.y }; else simPts.more[k] = { x: p.x, y: p.y };
     changed();
   }
-  function addPoint(p) {              // add a new one, which takes over as furthest point if it is further from the launch
+  function addPoint(p) {              // add the next numbered point; the first one added becomes point 2
     if (onLand(p)) return;
     if (simPts.more.length >= 10) { hint.textContent = 'That is as many crosshairs as the map takes.'; return; }
-    const far = fpPos();
-    if (gap(p, home()) > gap(far, home())) {
-      if (simPts.p2) simPts.more.unshift(simPts.p2);
-      simPts.p2 = { x: far.x, y: far.y }; simPts.fp = { x: p.x, y: p.y };
-    } else simPts.more.push({ x: p.x, y: p.y });
+    if (!simPts.p2) simPts.p2 = { x: p.x, y: p.y }; else simPts.more.push({ x: p.x, y: p.y });
     changed();
   }
   /* ----- the launch crosshair ----- */
