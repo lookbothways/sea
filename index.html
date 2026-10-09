@@ -76,6 +76,15 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
 .w.ok{background:color-mix(in srgb,var(--go) 16%,transparent); color:var(--ink)}
 .w.strong{background:color-mix(in srgb,var(--strong) 24%,transparent); color:var(--ink)}
 .w i{display:inline-block; font-style:normal; margin-left:.15rem}
+/* Rain under the wind, in the same three-hour blocks. A dry block is plain white. The colours follow the usual
+   rain-radar order, each dark enough for the white figure to read. */
+.rain{display:grid; grid-template-columns:repeat(8,1fr); gap:1px; margin-top:1px; container-type:inline-size}
+.r{height:1.05rem; line-height:1.05rem; text-align:center; font-size:.75rem; border-radius:2px; color:#fff; background:#fff; white-space:nowrap; overflow:hidden}
+.r small{font-size:.6rem; margin-left:.15rem}
+/* On a phone the blocks are too narrow for figure and unit side by side, so the unit drops underneath. */
+@container (max-width:27rem){ .r{height:1.6rem; line-height:.9rem} .r small{display:block; margin:0; line-height:.6rem} }
+.r1{background:#4A72BE} .r2{background:#3050B4} .r3{background:#1F8086} .r4{background:#3D7F23}
+.r5{background:#8F7400} .r6{background:#B5560F} .r7{background:#BA2A52} .r8{background:#7C40BA}
 .axis{display:flex; justify-content:space-between; font-size:.75rem; color:var(--muted)}
 
 .wins{list-style:none; margin:.5rem 0 0; padding:0}
@@ -470,6 +479,9 @@ function dayName(key, now) {
 
 function windText(w) { return `${compass(w.dir)} ${w.wind} knots, gusting ${w.gust}`; }
 
+// Where each rain colour starts, in millimetres an hour.
+const RAIN_STEPS = [0.1, 0.3, 0.7, 1.5, 3, 6, 12, 24];
+
 /* A No or a Marginal, with each figure and reason coloured by how serious it is and the worst reasons first. */
 const sev = (n, text) => `<span class="s${n}">${text}</span>`;
 function gradedLine(w) {
@@ -567,10 +579,15 @@ function renderDays(wins, now) {
     });
     if (key === today.key) track += `<div class="now" style="left:${pct(today.mins)}" title="Now"></div>`;
 
-    let wind = '';
+    let wind = '', rain = '';
     for (let b = 0; b < 8; b++) {
       const hs = byDay[key].filter(h => h.mins >= b * 180 && h.mins < (b + 1) * 180);
-      if (!hs.length) { wind += '<div class="w"></div>'; continue; }
+      if (!hs.length) { wind += '<div class="w"></div>'; rain += '<div class="r"></div>'; continue; }
+      // Rain is shown as the wettest hour of the block, in millimetres an hour.
+      const mm = Math.max(...hs.map(h => h.rain)), sum = hs.reduce((a, h) => a + h.rain, 0);
+      const lvl = RAIN_STEPS.filter(v => mm >= v).length;
+      rain += lvl ? `<div class="r r${lvl}" title="Up to ${mm.toFixed(1)} mm an hour, ${sum.toFixed(1)} mm in the three hours">${mm < 10 ? mm.toFixed(1) : Math.round(mm)}<small>mm/hr</small></div>`
+        : '<div class="r" title="Dry"></div>';
       const sp = Math.round(mean(hs.map(h => h.wind))), g = Math.max(...hs.map(h => h.gust)), dir = hs[Math.floor(hs.length / 2)].dir;
       const cls = sp > S.windMax || g > S.gustMax ? 'strong' : sp < S.windMin ? '' : 'ok';
       wind += `<div class="w ${cls}" title="${compass(dir)} ${sp} knots, gusts ${Math.round(g)}">${sp}<i style="transform:rotate(${Math.round(dir + 180)}deg)">↑</i></div>`;
@@ -590,6 +607,7 @@ function renderDays(wins, now) {
     return `<section class="day"><div class="dayhead"><h2>${rel ? rel[0].toUpperCase() + rel.slice(1) + ', ' : ''}${title}<span>light ${hm(sn.rise)} to ${hm(sn.set)}</span></h2>` +
       `<button type="button" class="simbtn" data-sim="${key}" aria-expanded="false" aria-controls="sim-${key}"${dayWins.length && tide ? '' : ' disabled'}>Simulate</button></div>` +
       `<div class="track">${track}</div><div class="wind" aria-label="Wind in knots, three-hour blocks">${wind}</div>` +
+      `<div class="rain" aria-label="Rain in millimetres an hour, three-hour blocks">${rain}</div>` +
       `<div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>` +
       `<ul class="wins">${list}</ul><div class="sim" id="sim-${key}" hidden></div></section>`;
   }).join('');
