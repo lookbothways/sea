@@ -15,6 +15,8 @@
   --water:#B4D5E7; --water-line:#2F6F97;
   --mark:#A3238E;
   --go:#22764A; --maybe:#A86A0C; --strong:#B4483C;
+  /* How serious a reason is, worst first: wind, sea, tricky water, not worth going, fine. All dark enough to read on white. */
+  --sev4:#8E1F1B; --sev3:#A13E16; --sev2:#8F5E0E; --sev1:#666A1E; --sev0:#1D6A3C;
   --sea:#DCECF5; --land:#F6F1DC; --land-line:#D6CCA2; --route:#123F66;
 }
 *{box-sizing:border-box}
@@ -80,6 +82,10 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
 .wins li{padding:.25rem 0 .25rem .9rem; border-left:3px solid var(--rule); margin-top:.3rem}
 .wins li.go{border-color:var(--go)} .wins li.maybe{border-color:var(--maybe)}
 .wins li.no{color:var(--muted)}
+.s4{color:var(--sev4); font-weight:600} .s3{color:var(--sev3); font-weight:600}
+.s2{color:var(--sev2)} .s1{color:var(--sev1)} .s0{color:var(--sev0)}
+.wins li.no.w4{border-color:var(--sev4)} .wins li.no.w3{border-color:var(--sev3)}
+.wins li.no.w2{border-color:var(--sev2)} .wins li.no.w1{border-color:var(--sev1)}
 .dayhead{display:flex; align-items:baseline; flex-wrap:wrap; gap:.3rem .8rem}
 .simbtn{margin:0 0 0 auto; padding:.1rem .7rem; font-size:.9rem}
 .simbtn[aria-expanded="true"]{background:var(--ink); color:var(--paper); border-color:var(--ink)}
@@ -109,7 +115,6 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
 .scale{fill:none; stroke:var(--muted); stroke-width:1.5}
 .lbl{position:absolute; transform:translate(-50%,-50%); font-size:.8rem; line-height:1; color:var(--muted); white-space:nowrap; pointer-events:none}
 .lbl.water{font-style:italic; color:#5D8BA8; font-size:.95rem; letter-spacing:.04em}
-.lbl.here{color:var(--mark); font-weight:600}
 .lbl.windlbl{left:94.2%; top:18.2%; color:var(--route); font-weight:600}
 .lbl.scalelbl{left:6.7%; top:92.3%}
 .map{user-select:none; -webkit-user-select:none}
@@ -128,6 +133,16 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
 }
 .xh.auto{opacity:.55}
 .xh.drag{cursor:grabbing}
+/* The launch crosshair has a dot in the middle, and its name sits on the land side. */
+.xh.home{z-index:1; background:radial-gradient(circle,currentColor 2.5px,transparent 3px,transparent 5px,currentColor 5px,currentColor 6.5px,transparent 6.5px)}
+.xh.lft span{left:auto; right:100%; margin:0 .1rem 0 0}
+.xh.carry{animation:lift .7s ease-in-out infinite alternate}
+@keyframes lift{to{scale:1.3}}
+@media (prefers-reduced-motion:reduce){ .xh.carry{animation:none; scale:1.3} }
+.map.carrying{cursor:crosshair}
+.map.carrying .xh{pointer-events:none}
+.snapline{fill:none; stroke:var(--mark); stroke-width:1.5; stroke-dasharray:3 3; vector-effect:non-scaling-stroke}
+.snapdot{fill:var(--paper); stroke:var(--mark); stroke-width:2; vector-effect:non-scaling-stroke}
 .sim-ctl{display:flex; align-items:center; gap:.8rem; margin-top:.7rem}
 .sim-ctl button{margin:0; min-width:4.4rem}
 .sim-ctl input{flex:1; width:auto; margin:0; padding:0; border:0; accent-color:var(--route)}
@@ -192,7 +207,7 @@ footer p{margin:.4rem 0}
     <label><span>Highest waves, metres</span><input type="number" id="waveMax" min="0" max="3" step="0.1"><b class="delta" id="d-waveMax"></b></label>
     <label><span>Highest swell, metres</span><input type="number" id="swellMax" min="0" max="3" step="0.1"><b class="delta" id="d-swellMax"></b></label>
     <label><span>Longest swell period before it is marginal, seconds</span><input type="number" id="periodMax" min="4" max="20"><b class="delta" id="d-periodMax"></b></label>
-    <label><span>High water at Patch is this much later than predicted, minutes</span><input type="number" id="offset" min="-120" max="180" step="5"><b class="delta" id="d-offset"></b></label>
+    <label><span id="offsetLbl">High water at Patch is this much later than predicted, minutes</span><input type="number" id="offset" min="-120" max="180" step="5"><b class="delta" id="d-offset"></b></label>
   </div>
   <button id="reset" type="button">Reset to defaults</button>
   <button id="massage" type="button">Massage</button>
@@ -202,7 +217,7 @@ footer p{margin:.4rem 0}
 <div class="page">
 
 <header>
-  <p class="place">Patch, Teifi estuary</p>
+  <p class="place" id="place">Patch, Teifi estuary</p>
   <h1 id="hero">Checking wind and tide</h1>
   <p class="sub" id="heroSub"></p>
   <p class="river" id="river"></p>
@@ -215,6 +230,7 @@ footer p{margin:.4rem 0}
 <footer>
   <p id="tideSource"></p>
   <p>Wind, rain, daylight, waves, swell and river flow from Open-Meteo. The wave figures are a forecast for the open bay off Cardigan Island. Solid green is inside your limits, hatched amber is marginal.</p>
+  <p>On a No, the figures and reasons are coloured by how serious they are: dark red for wind over your limits, rust for waves or swell over them, ochre for awkward stream, swell or wind direction, olive for things that only make it not worth going, and green for what is fine.</p>
   <p>This is a planning aid. After high water the ebb at Patch runs out over the bar to open sea, so look at the water and the wind before you launch.</p>
 </footer>
 
@@ -224,9 +240,9 @@ footer p{margin:.4rem 0}
 (() => {
 'use strict';
 
-const LAT = 52.104699, LON = -4.681918;      // Patch
+const PATCH = { lat: 52.104699, lon: -4.681918 };   // the default launch
 const RIVER = { lat: 52.06, lon: -4.60 };    // Teifi near Llechryd, for river flow
-const SEAWARD = 320;                         // bearing the ebb runs out on
+const SEAWARD = 320;                         // bearing the ebb runs out on over the bar
 const HIGH_FLOW = 45;                        // m3/s, roughly 1.5x the Teifi's average
 const TZ = 'Europe/London';
 const MIN = 60000;
@@ -270,7 +286,8 @@ async function getJSON(url) {
 
 /* ---------- data ---------- */
 async function loadWeather() {
-  const j = await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}` +
+  const lat = site.patch ? PATCH.lat : site.lat.toFixed(4), lon = site.patch ? PATCH.lon : site.lon.toFixed(4);
+  const j = await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     '&hourly=wind_speed_10m,wind_gusts_10m,wind_direction_10m,precipitation&daily=sunrise,sunset' +
     '&wind_speed_unit=kn&timeformat=unixtime&timezone=GMT&forecast_days=7');
   hours = j.hourly.time.map((t, i) => ({
@@ -411,27 +428,30 @@ function buildWindows() {
     const first = hw - S.lead * MIN, last = hw + S.ret * MIN;
     const launch = Math.max(first, sn.rise), back = Math.min(last, sn.set - 30 * MIN);
     if (back - launch < 15 * MIN || back > lastHour + 60 * MIN) return null;   // dark, or beyond the forecast
-    const w = { hw, launch, back, key, h: e.h, reasons: [], status: 'go', atDawn: launch > first, atDusk: back < last };
+    const w = { hw, launch, back, key, h: e.h, reasons: [], why: [], status: 'go', atDawn: launch > first, atDusk: back < last };
     const st = conditions(launch, back);
     if (!st) return null;
     Object.assign(w, st);
 
-    const bad = r => { w.status = 'no'; w.reasons.push(r); };
-    const warn = r => { if (w.status === 'go') w.status = 'maybe'; w.reasons.push(r); };
-    if (w.h < S.tideMin) bad(`high water is only ${w.h.toFixed(1)} m, under your ${S.tideMin} m`);
+    // Each reason carries how serious it is, 4 (wind over the limits) down to 1 (only not worth going).
+    const note = (r, n) => { w.reasons.push(r); w.why.push({ t: r, sev: n }); };
+    const bad = (r, n) => { w.status = 'no'; note(r, n); };
+    const warn = (r, n) => { if (w.status === 'go') w.status = 'maybe'; note(r, n); };
+    if (w.h < S.tideMin) bad(`high water is only ${w.h.toFixed(1)} m, under your ${S.tideMin} m`, 1);
     const slot = Math.round((back - launch) / MIN);
-    if (slot < S.slotMin) bad(`only ${slot} minutes of daylight in the window, under your ${S.slotMin}`);
-    if (w.wind > S.windMax) bad(`wind over your ${S.windMax} knot limit`);
-    else if (w.gust > S.gustMax) bad(`gusts over your ${S.gustMax} knot limit`);
-    else if (w.wind < S.windMin) warn('very light wind');
-    if (w.wave > S.waveMax) bad(`waves over your ${S.waveMax} m limit`);
-    if (w.swell > S.swellMax) bad(`swell over your ${S.swellMax} m limit`);
-    else if (w.swell > 0.2 && w.swellPeriod > S.periodMax) warn(`long ${Math.round(w.swellPeriod)} second swell, which breaks hard on the bar`);
-    if (w.wave == null) warn('no wave forecast');
-    if (w.wind >= 10 && angDiff(w.dir, SEAWARD) <= 50) warn('onshore wind against the ebb after high water, choppy towards the bar');
-    if (w.wind >= 8 && angDiff(w.dir, (SEAWARD + 180) % 360) <= 50) warn('offshore wind, so it is a beat home');
-    if (w.rain > 3) warn('wet');
-    if (river[key] > HIGH_FLOW) warn('river running high, so the ebb starts early and runs hard');
+    if (slot < S.slotMin) bad(`only ${slot} minutes of daylight in the window, under your ${S.slotMin}`, 1);
+    if (w.wind > S.windMax) bad(`wind over your ${S.windMax} knot limit`, 4);
+    else if (w.gust > S.gustMax) bad(`gusts over your ${S.gustMax} knot limit`, 4);
+    else if (w.wind < S.windMin) warn('very light wind', 1);
+    if (w.wave > S.waveMax) bad(`waves over your ${S.waveMax} m limit`, 3);
+    if (w.swell > S.swellMax) bad(`swell over your ${S.swellMax} m limit`, 3);
+    else if (w.swell > 0.2 && w.swellPeriod > S.periodMax) warn(`long ${Math.round(w.swellPeriod)} second swell, which breaks hard on the ${site.estuary ? 'bar' : 'shore'}`, 2);
+    if (w.wave == null) warn('no wave forecast', 1);
+    // The ebb warnings only matter when the trip starts inside the estuary.
+    if (site.estuary && w.wind >= 10 && angDiff(w.dir, SEAWARD) <= 50) warn('onshore wind against the ebb after high water, choppy towards the bar', 2);
+    if (w.wind >= 8 && angDiff(w.dir, (site.seaward + 180) % 360) <= 50) warn('offshore wind, so it is a beat home', 2);
+    if (w.rain > 3) warn('wet', 1);
+    if (site.estuary && river[key] > HIGH_FLOW) warn('river running high, so the ebb starts early and runs hard', 2);
     return w;
   }).filter(Boolean);
 }
@@ -447,6 +467,24 @@ function dayName(key, now) {
 }
 
 function windText(w) { return `${compass(w.dir)} ${w.wind} knots, gusting ${w.gust}`; }
+
+/* A No, with each figure and reason coloured by how serious it is and the worst reasons first. */
+const sev = (n, text) => `<span class="s${n}">${text}</span>`;
+function gradedLine(w) {
+  let sea = '';
+  if (w.wave != null) {
+    sea = ' ' + sev(w.wave > S.waveMax ? 3 : 0, `Waves ${w.wave.toFixed(1)}&nbsp;m`);
+    if (w.swell != null) sea += ', ' + sev(w.swell > S.swellMax ? 3 : w.swell > 0.2 && w.swellPeriod > S.periodMax ? 2 : 0,
+      `swell ${w.swell.toFixed(1)}&nbsp;m at ${Math.round(w.swellPeriod)}&nbsp;seconds`);
+    sea += '.';
+  }
+  const why = w.why.slice().sort((a, b) => b.sev - a.sev)
+    .map((r, i) => sev(r.sev, esc(i ? r.t : r.t[0].toUpperCase() + r.t.slice(1)))).join('; ');
+  return `Launch ${hm(w.launch)}${w.atDawn ? ' (sunrise)' : ''}, high water ${hm(w.hw)} at ${sev(w.h < S.tideMin ? 1 : 0, w.h.toFixed(1) + '&nbsp;m')}, ` +
+    `back by ${hm(w.back)}${w.atDusk ? ' (dusk)' : ''}. ` +
+    `${sev(w.wind > S.windMax ? 4 : w.wind < S.windMin ? 1 : 0, `${compass(w.dir)} ${w.wind}&nbsp;knots`)}, ${sev(w.gust > S.gustMax ? 4 : 0, `gusting&nbsp;${w.gust}`)}.` +
+    `${sea}${why ? ' ' + why + '.' : ''}`;
+}
 function seaText(w) {
   if (w.wave == null) return '';
   return ` Waves ${w.wave.toFixed(1)} m` + (w.swell != null ? `, swell ${w.swell.toFixed(1)} m at ${Math.round(w.swellPeriod)} seconds.` : '.');
@@ -478,7 +516,7 @@ function renderHero(wins, now) {
   if (pick.launch <= now) h1.textContent = `Launch now, high water is at ${hm(pick.hw)}`;
   else if (pick.status === 'go') h1.textContent = `Launch ${day} at ${hm(pick.launch)}`;
   else h1.textContent = `Marginal ${rel || 'on ' + day} at ${hm(pick.launch)}`;
-  let t = `High water ${hm(pick.hw)} at ${pick.h.toFixed(1)} m, back at Patch by ${hm(pick.back)}. ${windText(pick)}.${seaText(pick)}`;
+  let t = `High water ${hm(pick.hw)} at ${pick.h.toFixed(1)} m, back ${site.patch ? 'at Patch' : 'ashore'} by ${hm(pick.back)}. ${windText(pick)}.${seaText(pick)}`;
   if (pick.reasons.length) t += ' Watch for: ' + pick.reasons.join('; ') + '.';
   sub.textContent = t;
 }
@@ -537,7 +575,8 @@ function renderDays(wins, now) {
     }
 
     const label = { go: 'Good', maybe: 'Marginal', no: 'No' };
-    const list = dayWins.length ? dayWins.map(w =>
+    const list = dayWins.length ? dayWins.map(w => w.status === 'no'
+      ? `<li class="no w${Math.max(0, ...w.why.map(r => r.sev))}"><b>No.</b> ${gradedLine(w)}</li>` :
       `<li class="${w.status}"><b>${label[w.status]}.</b> Launch ${hm(w.launch)}${w.atDawn ? ' (sunrise)' : ''}, high water ${hm(w.hw)} at ${w.h.toFixed(1)} m, back by ${hm(w.back)}${w.atDusk ? ' (dusk)' : ''}. ` +
       `${windText(w)}.${seaText(w)}${w.reasons.length ? ' ' + esc(w.reasons.join('; ')).replace(/^./, c => c.toUpperCase()) + '.' : ''}</li>`
     ).join('') : '<li class="no">High water falls in the dark.</li>';
@@ -612,7 +651,7 @@ const LAND = [COAST, ISLAND].map(r => r.map(c => xy(c[0], c[1])));
 const LABELS = [
   ['Cardigan Bay', -4.752, 52.129, 'water'], ['Cardigan Island', -4.6905, 52.1388, ''],
   ['Cemaes Head', -4.7265, 52.1085, ''], ['Poppit Sands', -4.7035, 52.1008, ''],
-  ['Gwbert', -4.6765, 52.1140, ''], ['Patch', -4.6765, 52.1058, 'here'],
+  ['Gwbert', -4.6765, 52.1140, ''], ['Patch', -4.6765, 52.1058, ''],
   ['St Dogmaels', -4.6965, 52.0835, ''], ['Cardigan', -4.6560, 52.0880, '']
 ];
 
@@ -806,25 +845,145 @@ function simulate(wps, t0, tMax, riverKn) {
   return done(true);
 }
 
+/* ---------- the launch ----------
+   Patch unless another spot has been picked on the map. A dropped launch snaps to the
+   foot of the perpendicular to the nearest stretch of mainland shore, and the boat
+   starts a little way off it in clear water. */
+const toLL = p => ({ lon: MAPB.w + p.x / MX, lat: MAPB.s + p.y / MY });
+const bearing = (a, b) => (Math.atan2(b.x - a.x, b.y - a.y) / RAD + 360) % 360;
+const SHORE = (() => {     // the mainland shore inside the map, kept clear of its edges
+  const ring = LAND[0], m = 150, out = [];
+  for (let i = 0; i < COAST.length - 3; i++) {     // the last edges close the ring well off the map
+    const a = ring[i], b = ring[i + 1], dx = b.x - a.x, dy = b.y - a.y;
+    let t0 = 0, t1 = 1;
+    const inside = [[-dx, a.x - m], [dx, MW - m - a.x], [-dy, a.y - m], [dy, MH - m - a.y]].every(([p, q]) => {
+      if (!p) return q >= 0;
+      const r = q / p;
+      if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; }
+      return true;
+    });
+    if (inside && t1 > t0) out.push([{ x: a.x + t0 * dx, y: a.y + t0 * dy }, { x: a.x + t1 * dx, y: a.y + t1 * dy }]);
+  }
+  return out;
+})();
+function snapShore(p) {   // also gives the direction the shore runs there, as tx, ty
+  let best = null, bd = Infinity;
+  for (const [a, b] of SHORE) {
+    const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (L * L)));
+    const q = { x: a.x + t * dx, y: a.y + t * dy, tx: dx / L, ty: dy / L }, d = gap(p, q);
+    if (d < bd) { bd = d; best = q; }
+  }
+  return best;
+}
+function chanDist(p) {     // metres to the estuary channel line
+  let best = Infinity;
+  for (let i = 0; i < CHAN.length - 1; i++) {
+    const a = CHAN[i], b = CHAN[i + 1], dx = b.x - a.x, dy = b.y - a.y;
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
+    best = Math.min(best, Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy));
+  }
+  return best;
+}
+const PATCH_LAUNCH = Object.assign({ patch: true, name: 'Patch', estuary: true, seaward: SEAWARD, s: NODE.S0 },
+  PATCH, { c: snapShore(xy(PATCH.lon, PATCH.lat)) });
+
+function makeLaunch(p) {
+  const c = snapShore(p);
+  if (gap(c, PATCH_LAUNCH.c) < 150) return PATCH_LAUNCH;
+  // Which way the open water lies: the average direction of the water within 250 m, weighted by its room.
+  let u = 0, v = 0;
+  for (let k = 0; k < 24; k++) {
+    const th = k * 15 * RAD, d = landDist({ x: c.x + Math.sin(th) * 250, y: c.y + Math.cos(th) * 250 });
+    u += Math.sin(th) * d; v += Math.cos(th) * d;
+  }
+  const len = Math.hypot(u, v);
+  if (!len) return null;
+  // Start straight out from the shore once there is room, else at the nearest spot that has it.
+  let s = null;
+  for (let r = 10; r <= 400 && !s; r += 10) { const q = { x: c.x + u / len * r, y: c.y + v / len * r }; if (landDist(q) >= SAFE + 10) s = q; }
+  for (let r = 20; r <= 400 && !s; r += 20) for (let k = 0; k < 36 && !s; k++) {
+    const q = { x: c.x + Math.sin(k * 10 * RAD) * r, y: c.y + Math.cos(k * 10 * RAD) * r };
+    if (landDist(q) >= SAFE + 10) s = q;
+  }
+  if (!s || !shortest(s, NODE.S2)) return null;     // no clear water out to sea from here
+  // Named after the nearest place on the map, if one is close.
+  let name = null, nd = 1200;
+  LABELS.forEach(l => {
+    if (l[3] || l[0] === 'Cardigan Island') return;
+    const d = gap(c, xy(l[1], l[2]));
+    if (d < nd) { nd = d; name = l[0]; }
+  });
+  return Object.assign({ patch: false, name, c, s, seaward: Math.round(bearing(c, s)), estuary: chanDist(s) < 900 }, toLL(c));
+}
+
+const LAUNCH_STORE = STORE + '-launch';
+let site = PATCH_LAUNCH, launchPending = null;   // site: where the launch is now. Pending: moved on the map but not yet resimulated
+try {
+  const v = JSON.parse(localStorage.getItem(LAUNCH_STORE) || 'null');
+  if (v && isFinite(v.lon) && isFinite(v.lat)) site = makeLaunch(xy(v.lon, v.lat)) || PATCH_LAUNCH;
+} catch (e) { /* Patch it is */ }
+const here = () => launchPending || site;
+
+function showPlace() {
+  $('place').textContent = site.patch ? 'Patch, Teifi estuary'
+    : `${site.name ? 'Near ' + site.name : 'Your launch point'}, ${site.estuary ? 'Teifi estuary' : 'Cardigan Bay'}`;
+  $('offsetLbl').textContent = `High water at ${site.patch ? 'Patch' : 'your launch point'} is this much later than predicted, minutes`;
+}
+showPlace();
+
+// Make a moved launch the real one: save it, fetch the wind for it, and redraw with that day's panel open.
+function applyLaunch(L, key) {
+  site = L; launchPending = null;
+  try {
+    if (L.patch) localStorage.removeItem(LAUNCH_STORE);
+    else localStorage.setItem(LAUNCH_STORE, JSON.stringify({ lon: +L.lon.toFixed(5), lat: +L.lat.toFixed(5) }));
+  } catch (e) { /* kept for this visit only */ }
+  showPlace();
+  const hint = document.querySelector(`#sim-${key} .sim-hint`);
+  if (hint) hint.textContent = 'Getting the forecast for the new launch point.';
+  cancelAnimationFrame(simRaf);
+  simKey = key;
+  loadWeather().then(() => { weatherError = false; }, () => { /* keep the last forecast */ }).then(render);
+}
+
 /* The route. Untouched, it is the standard loop round Cardigan Island, taken
    whichever way round is quicker. Once a crosshair has been moved or added it runs
-   from Patch to the furthest point, then through the numbered points in order, and home. */
-let simPts = { fp: null, p2: null, more: [] }, simAdding = false;
+   from the launch through the numbered points in order, and home. */
+let simPts = { fp: null, p2: null, more: [] }, simAdding = false;   // fp is point 1, more holds points 3 on
 const touched = () => !!(simPts.fp || simPts.p2 || simPts.more.length);
+const RING = ['S2', 'I1', 'I2', 'I3', 'I4', 'I5', 'K', 'I6'];   // the loop round the island
+const pathLen = pts => pts.reduce((s, p, i) => s + (i ? gap(pts[i - 1], p) : 0), 0);
 
 function planRoute(w) {
   const riverKn = Math.min(2, (river[w.key] || 0) / 120), tMax = w.back + 90 * MIN;
   const run = (pts, fpIndex, name) => Object.assign(simulate(makeRoute(pts), w.launch, tMax, riverKn), { pts, fpIndex, name });
+  const L = site.s;
   let r;
-  if (!touched()) {
+  if (!touched() && site.patch) {
     const a = run(WAY_OUT.concat(named(['I1', 'I2', 'I3', 'I4', 'I5', 'K', 'I6', 'S2']), WAY_HOME), WAY_OUT.length + 2, 'Round Cardigan Island');
     const b = run(WAY_OUT.concat(named(['I6', 'K', 'I5', 'I4', 'I3', 'I2', 'I1', 'S2']), WAY_HOME), WAY_OUT.length + 4, 'Round Cardigan Island');
     r = b.ok && (!a.ok || b.end < a.end) ? b : a;
-  } else {
-    // Patch, the furthest point, then point 2 if it has been placed, then points 3, 4 and so on, then home.
-    const stops = [NODE.S0, simPts.fp || NODE.I3].concat(simPts.p2 ? [simPts.p2] : [], simPts.more, [NODE.S0]);
+  } else if (!touched()) {
+    // From anywhere else: the same loop, joined at whichever point of it is nearest by water.
+    let entry = -1, way = null;
+    RING.forEach((id, i) => { const p = shortest(L, NODE[id]); if (p && (!way || pathLen(p) < pathLen(way))) { entry = i; way = p; } });
+    if (!way) return null;
     const used = new Set();
-    let pts = [NODE.S0], fpIndex = 0;
+    way.slice(1).forEach((q, j) => used.add(segKey(way[j], q)));
+    const back = shortest(NODE[RING[entry]], L, used);
+    if (!back) return null;
+    const [a, b] = [1, -1].map(dir => {
+      const loop = RING.map((_, k) => NODE[RING[(entry + dir * (k + 1) + RING.length) % RING.length]]);
+      const pts = way.concat(loop, back.slice(1));
+      return run(pts, pts.lastIndexOf(NODE.I3), 'Round Cardigan Island');
+    });
+    r = b.ok && (!a.ok || b.end < a.end) ? b : a;
+  } else {
+    // The launch, point 1, then point 2 if it has been placed, then points 3, 4 and so on, then home.
+    const stops = [L, simPts.fp || NODE.I3].concat(simPts.p2 ? [simPts.p2] : [], simPts.more, [L]);
+    const used = new Set();
+    let pts = [L], fpIndex = 0;
     for (let i = 1; i < stops.length; i++) {
       const leg = shortest(stops[i - 1], stops[i], used);
       if (!leg) return null;
@@ -852,7 +1011,7 @@ function halfWay(pts) {
 }
 
 /* ---------- simulation panel ---------- */
-let simKey = null, simRaf = 0, lastWins = [];
+let simKey = null, simRaf = 0, lastWins = [], cancelCarry = null;
 
 function landPath(ring) {
   const n = ring.length; let d = '';
@@ -873,7 +1032,8 @@ function simWindow(key) {
 }
 
 function simText(r, w) {
-  if (!r) return 'No clear route through those points. Move a crosshair and press Resimulate.';
+  if (!r) return touched() ? 'No clear route through those points. Move a crosshair and press Resimulate.'
+    : 'No clear route round the island from this launch point. Try another spot on the shore.';
   const tk = r.tacks.length, mins = n => `${n} ${n === 1 ? 'minute' : 'minutes'}`;
   const stats = `${(r.dist / 1852).toFixed(1)} nautical miles, ${tk} ${tk === 1 ? 'tack' : 'tacks'}.`;
   let s;
@@ -892,7 +1052,7 @@ function closeSim() {
   if (box) { box.hidden = true; box.innerHTML = ''; }
   document.querySelectorAll('.simbar').forEach(el => el.remove());
   if (btn) { btn.setAttribute('aria-expanded', 'false'); btn.textContent = 'Simulate'; btn.classList.remove('dirty'); }
-  simKey = null; simAdding = false;
+  simKey = null; simAdding = false; cancelCarry = null;
 }
 
 function openSim(key, quiet) {
@@ -902,7 +1062,7 @@ function openSim(key, quiet) {
   simKey = key;
   btn.setAttribute('aria-expanded', 'true');
   btn.textContent = 'Resimulate';
-  const S0 = NODE.S0, plan = planRoute(w);
+  const S0 = site.s, plan = planRoute(w);
   const r = plan || { path: [{ t: w.launch, x: S0.x, y: S0.y, h: 0, s: 0 }], tacks: [], end: w.launch, dist: 0, riverKn: 0 };
   const path = r.path, n = path.length, t0 = path[0].t, total = r.end - t0;
   const pt = p => vx(p) + ',' + vy(p);
@@ -912,17 +1072,19 @@ function openSim(key, quiet) {
     `<span class="sim-btns"><button type="button" class="sim-again" hidden>Resimulate</button>` +
     `<button type="button" class="sim-add" aria-pressed="false">Add more crosshairs</button>` +
     `<button type="button" class="sim-reset"${touched() ? '' : ' hidden'}>Reset route</button>` +
+    `<button type="button" class="sim-patch"${here().patch ? ' hidden' : ''}>Launch from Patch</button>` +
     `<button type="button" class="sim-close">Close</button></span></div>` +
     `<div class="map"><svg viewBox="0 0 ${VW} ${VH.toFixed(1)}" role="img" aria-label="Map of the Teifi estuary and Cardigan Island with the simulated route">` +
       `<path class="land" d="${LAND.map(landPath).join(' ')}"/>` +
       `<path class="route ghost" d="${path.map((p, i) => (i ? 'L' : 'M') + pt(p)).join(' ')}"/><path class="route live" d=""/>` +
       r.tacks.map(k => `<circle class="tackdot" cx="${vx(k)}" cy="${vy(k)}" r="3.2"/>`).join('') +
       `<circle class="launch" cx="${vx(S0)}" cy="${vy(S0)}" r="4"/>` +
+      `<path class="snapline" d="" display="none"/><circle class="snapdot" r="5" display="none"/>` +
       `<g transform="translate(${VW - 58},58)"><circle class="rose" r="30"/><path class="rose-arrow" d="M0,-18 L0,18 M-6,9 L0,18 L6,9"/></g>` +
       `<path class="scale" d="M28,${(VH - 26).toFixed(1)} h${(1000 * VK).toFixed(1)}"/>` +
       `<path class="boat" d="M0,-10 L5.5,7 L0,4 L-5.5,7 Z"/>` +
     `</svg>` +
-    LABELS.map(l => `<span class="lbl ${l[3]}" style="${pos(l)}">${l[0]}</span>`).join('') +
+    LABELS.map(l => `<span class="lbl ${l[3]}" style="${pos(l)}" data-name="${l[0]}">${l[0]}</span>`).join('') +
     `<span class="lbl windlbl"></span><span class="lbl scalelbl">1 km</span>` +
     `</div>` +
     `<div class="sim-ctl"><button type="button" class="sim-play">Play</button>` +
@@ -994,18 +1156,20 @@ function openSim(key, quiet) {
   /* Crosshairs. A tap or click on the map moves the nearest one there, or adds a new
      one while adding is switched on. With a mouse they can also be dragged. Nothing
      is recalculated until Resimulate is pressed. Point 2 is only a suggestion, half
-     way to the next stop, until it has been moved itself. */
+     way from point 1 to the next stop, until it has been moved or added.
+     The launch crosshair is moved on its own: drag it, or click or tap it to pick it
+     up and then click or tap where it should go. It snaps to the nearest shore. */
   const mapEl = q('.map'), hint = q('.sim-hint'), addBtn = q('.sim-add');
-  const fpPos = () => simPts.fp || NODE.I3;
-  let ghost = null, dragEnd = 0;
+  const fpPos = () => simPts.fp || NODE.I3, home = () => here().s;
+  let ghost = null, dragEnd = 0, carrying = false;
   const setGhost = () => {
     if (simPts.p2) { ghost = null; return; }
-    const next = simPts.more[0] || S0, way = shortest(fpPos(), next);
+    const next = simPts.more[0] || home(), way = shortest(fpPos(), next);
     ghost = halfWay(way || [fpPos(), next]);
   };
   if (touched()) setGhost(); else ghost = halfWay(plan ? plan.pts.slice(plan.fpIndex) : [fpPos(), S0]);
 
-  const items = () => [{ k: 'fp', label: 'Furthest point', p: fpPos() }, { k: 'p2', label: 'Point 2', p: simPts.p2 || ghost, auto: !simPts.p2 }]
+  const items = () => [{ k: 'fp', label: 'Point 1', p: fpPos() }, { k: 'p2', label: 'Point 2', p: simPts.p2 || ghost, auto: !simPts.p2 }]
     .concat(simPts.more.map((p, i) => ({ k: i, label: 'Point ' + (i + 3), p })));
   const place = (el, p) => {
     el.style.left = (p.x / MW * 100).toFixed(2) + '%';
@@ -1017,14 +1181,18 @@ function openSim(key, quiet) {
     return { x: fx * MW, y: (1 - fy) * MH };
   };
   const say = () => {
-    hint.textContent = simAdding ? 'Tap the map to add a crosshair.' : 'Tap the map to move the nearest crosshair there, then press Resimulate.';
+    hint.textContent = carrying ? 'Now click or tap where you launch from. It snaps to the nearest shore.'
+      : simAdding ? 'Tap the map to add the next point.'
+      : 'Tap the map to move the nearest crosshair there, or tap the launch crosshair to move the launch, then press Resimulate.';
     addBtn.textContent = simAdding ? 'Stop adding crosshairs' : 'Add more crosshairs';
     addBtn.setAttribute('aria-pressed', String(simAdding));
-    mapEl.classList.toggle('adding', simAdding);
+    mapEl.classList.toggle('adding', simAdding && !carrying);
+    mapEl.classList.toggle('carrying', carrying);
   };
   const changed = () => {
     setGhost(); draw(); say();
-    btn.classList.add('dirty'); q('.sim-again').hidden = false; q('.sim-reset').hidden = false;
+    btn.classList.add('dirty'); q('.sim-again').hidden = false;
+    q('.sim-reset').hidden = !touched(); q('.sim-patch').hidden = here().patch;
   };
   const onLand = p => {
     if (landDist(p) >= SAFE + 5) return false;
@@ -1036,18 +1204,85 @@ function openSim(key, quiet) {
     if (k === 'fp' || k === 'p2') simPts[k] = { x: p.x, y: p.y }; else simPts.more[k] = { x: p.x, y: p.y };
     changed();
   }
-  function addPoint(p) {              // add a new one, which takes over as furthest point if it is further from Patch
+  function addPoint(p) {              // add the next numbered point; the first one added becomes point 2
     if (onLand(p)) return;
     if (simPts.more.length >= 10) { hint.textContent = 'That is as many crosshairs as the map takes.'; return; }
-    const far = fpPos();
-    if (gap(p, S0) > gap(far, S0)) {
-      if (simPts.p2) simPts.more.unshift(simPts.p2);
-      simPts.p2 = { x: far.x, y: far.y }; simPts.fp = { x: p.x, y: p.y };
-    } else simPts.more.push({ x: p.x, y: p.y });
+    if (!simPts.p2) simPts.p2 = { x: p.x, y: p.y }; else simPts.more.push({ x: p.x, y: p.y });
     changed();
   }
+  /* ----- the launch crosshair ----- */
+  const guide = (p, c) => {          // dashed line from the pointer to where the launch will snap
+    const line = q('.snapline'), dot = q('.snapdot');
+    line.setAttribute('display', p ? 'inline' : 'none'); dot.setAttribute('display', p ? 'inline' : 'none');
+    if (!p) return;
+    line.setAttribute('d', `M${pt(p)} L${pt(c)}`); dot.setAttribute('cx', vx(c)); dot.setAttribute('cy', vy(c));
+  };
+  const hover = p => {               // while carried or dragged it follows the pointer
+    const el = mapEl.querySelector('.xh.home');
+    if (el) { place(el, p); el.firstChild.textContent = 'Launch'; }
+    guide(p, snapShore(p));
+  };
+  function dropLaunch(p) {
+    carrying = false;
+    const L = makeLaunch(p);
+    if (!L) { draw(); say(); hint.textContent = 'There is no clear water out to sea from that bit of shore on this map. Try another spot.'; return; }
+    if (gap(L.c, here().c) < 1) { draw(); say(); return; }
+    launchPending = gap(L.c, site.c) < 1 ? null : L;
+    changed();
+  }
+  function drawLaunch(L) {
+    const el = document.createElement('button');
+    el.type = 'button'; el.className = 'xh home' + (Math.sin(L.seaward * RAD) > 0 ? ' lft' : '') + (carrying ? ' carry' : '');
+    el.setAttribute('aria-pressed', String(carrying));
+    el.setAttribute('aria-label', `Launch point${L.name ? ' near ' + L.name : ''}. Press to pick it up, then click or tap the map where you launch from. ` +
+      'It snaps to the nearest shore. The arrow keys move it along the shore.');
+    el.innerHTML = `<span>${esc(L.name || 'Launch')}</span>`;
+    place(el, L.c);
+    let from = null, moved = false;
+    el.addEventListener('pointerdown', e => {
+      if (e.pointerType !== 'mouse' || e.button || carrying) return;   // fingers tap it instead
+      from = toMap(e); moved = false; el.setPointerCapture(e.pointerId); stop();
+    });
+    el.addEventListener('pointermove', e => {
+      if (!from) return;
+      const p = toMap(e);
+      if (!moved && gap(p, from) / MW * mapEl.getBoundingClientRect().width > 3) { moved = true; el.classList.add('drag'); }
+      if (moved) hover(p);
+    });
+    el.addEventListener('pointerup', e => {
+      if (!from) return;
+      from = null;
+      if (moved) { dragEnd = performance.now(); dropLaunch(toMap(e)); }
+    });
+    el.addEventListener('pointercancel', () => { if (from) { from = null; draw(); } });
+    el.addEventListener('click', e => {   // pick it up, or put it back down where it was
+      e.stopPropagation();
+      if (performance.now() - dragEnd < 300) return;
+      stop(); carrying = !carrying; draw(); say();
+      const again = mapEl.querySelector('.xh.home');
+      if (again) again.focus({ preventScroll: true });
+    });
+    el.addEventListener('keydown', e => {   // the arrow keys step it 200 m along the shore
+      const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
+      if (!d) return;
+      e.preventDefault(); stop();
+      const along = d[0] * L.c.tx + d[1] * L.c.ty;
+      if (Math.abs(along) < .2) return;         // straight on or off the shore
+      const k = Math.sign(along) * 200;
+      dropLaunch({ x: L.c.x + L.c.tx * k, y: L.c.y + L.c.ty * k });
+      const again = mapEl.querySelector('.xh.home');
+      if (again) again.focus();
+    });
+    mapEl.appendChild(el);
+  }
+  cancelCarry = () => { if (carrying) { carrying = false; draw(); say(); } };
+
   function draw() {
     mapEl.querySelectorAll('.xh').forEach(el => el.remove());
+    const L = here(), dot = q('.launch');
+    guide(null);
+    dot.setAttribute('cx', vx(L.s)); dot.setAttribute('cy', vy(L.s));
+    mapEl.querySelectorAll('.lbl[data-name]').forEach(el => { el.hidden = el.dataset.name === L.name; });
     items().forEach(it => {
       if (!it.p) return;
       const el = document.createElement('button');
@@ -1067,7 +1302,7 @@ function openSim(key, quiet) {
         it.p = p; place(el, p);
         if (!simPts.p2 && (it.k === 'fp' || it.k === 0) && !raf) raf = requestAnimationFrame(() => {
           raf = 0;
-          const g = mapEl.querySelector('.xh.auto'), way = shortest(it.k === 'fp' ? it.p : fpPos(), it.k === 0 ? it.p : simPts.more[0] || S0);
+          const g = mapEl.querySelector('.xh.auto'), way = shortest(it.k === 'fp' ? it.p : fpPos(), it.k === 0 ? it.p : simPts.more[0] || home());
           if (g && way) place(g, halfWay(way));
         });
       });
@@ -1088,8 +1323,10 @@ function openSim(key, quiet) {
       });
       mapEl.appendChild(el);
     });
+    drawLaunch(L);
   }
   mapEl.addEventListener('click', e => {
+    if (carrying) { stop(); dropLaunch(toMap(e)); return; }
     if (e.target.closest('.xh') || performance.now() - dragEnd < 300) return;
     const p = toMap(e);
     stop();
@@ -1098,8 +1335,10 @@ function openSim(key, quiet) {
     items().forEach(it => { if (it.p && gap(it.p, p) < best) { best = gap(it.p, p); near = it.k; } });
     commit(near, p);
   });
-  addBtn.addEventListener('click', () => { simAdding = !simAdding; say(); });
+  mapEl.addEventListener('pointermove', e => { if (carrying && e.pointerType === 'mouse') hover(toMap(e)); });
+  addBtn.addEventListener('click', () => { simAdding = !simAdding; carrying = false; draw(); say(); });
   draw(); say();
+  if (launchPending) { btn.classList.add('dirty'); q('.sim-again').hidden = false; }
 
   frame();
   if (!quiet) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -1108,11 +1347,17 @@ function openSim(key, quiet) {
 
 $('days').addEventListener('click', e => {
   const b = e.target.closest('[data-sim]');
-  if (b) { const k = b.getAttribute('data-sim'); openSim(k, k === simKey); return; }
-  if (e.target.closest('.sim-again')) openSim(simKey, true);
+  if (b) {
+    const k = b.getAttribute('data-sim');
+    if (k === simKey && launchPending) applyLaunch(launchPending, k); else openSim(k, k === simKey);
+    return;
+  }
+  if (e.target.closest('.sim-again')) { if (launchPending) applyLaunch(launchPending, simKey); else openSim(simKey, true); }
   else if (e.target.closest('.sim-close')) closeSim();
   else if (e.target.closest('.sim-reset')) { simPts = { fp: null, p2: null, more: [] }; simAdding = false; openSim(simKey, true); }
+  else if (e.target.closest('.sim-patch')) { launchPending = null; if (site.patch) openSim(simKey, true); else applyLaunch(PATCH_LAUNCH, simKey); }
 });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && cancelCarry) cancelCarry(); });
 
 /* ---------- settings ---------- */
 let massaged = false;
