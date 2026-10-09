@@ -15,6 +15,8 @@
   --water:#B4D5E7; --water-line:#2F6F97;
   --mark:#A3238E;
   --go:#22764A; --maybe:#A86A0C; --strong:#B4483C;
+  /* How serious a reason is, worst first: wind, sea, tricky water, not worth going, fine. All dark enough to read on white. */
+  --sev4:#8E1F1B; --sev3:#A13E16; --sev2:#8F5E0E; --sev1:#666A1E; --sev0:#1D6A3C;
   --sea:#DCECF5; --land:#F6F1DC; --land-line:#D6CCA2; --route:#123F66;
 }
 *{box-sizing:border-box}
@@ -80,6 +82,10 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
 .wins li{padding:.25rem 0 .25rem .9rem; border-left:3px solid var(--rule); margin-top:.3rem}
 .wins li.go{border-color:var(--go)} .wins li.maybe{border-color:var(--maybe)}
 .wins li.no{color:var(--muted)}
+.s4{color:var(--sev4); font-weight:600} .s3{color:var(--sev3); font-weight:600}
+.s2{color:var(--sev2)} .s1{color:var(--sev1)} .s0{color:var(--sev0)}
+.wins li.no.w4{border-color:var(--sev4)} .wins li.no.w3{border-color:var(--sev3)}
+.wins li.no.w2{border-color:var(--sev2)} .wins li.no.w1{border-color:var(--sev1)}
 .dayhead{display:flex; align-items:baseline; flex-wrap:wrap; gap:.3rem .8rem}
 .simbtn{margin:0 0 0 auto; padding:.1rem .7rem; font-size:.9rem}
 .simbtn[aria-expanded="true"]{background:var(--ink); color:var(--paper); border-color:var(--ink)}
@@ -224,6 +230,7 @@ footer p{margin:.4rem 0}
 <footer>
   <p id="tideSource"></p>
   <p>Wind, rain, daylight, waves, swell and river flow from Open-Meteo. The wave figures are a forecast for the open bay off Cardigan Island. Solid green is inside your limits, hatched amber is marginal.</p>
+  <p>On a No, the figures and reasons are coloured by how serious they are: dark red for wind over your limits, rust for waves or swell over them, ochre for awkward stream, swell or wind direction, olive for things that only make it not worth going, and green for what is fine.</p>
   <p>This is a planning aid. After high water the ebb at Patch runs out over the bar to open sea, so look at the water and the wind before you launch.</p>
 </footer>
 
@@ -421,28 +428,30 @@ function buildWindows() {
     const first = hw - S.lead * MIN, last = hw + S.ret * MIN;
     const launch = Math.max(first, sn.rise), back = Math.min(last, sn.set - 30 * MIN);
     if (back - launch < 15 * MIN || back > lastHour + 60 * MIN) return null;   // dark, or beyond the forecast
-    const w = { hw, launch, back, key, h: e.h, reasons: [], status: 'go', atDawn: launch > first, atDusk: back < last };
+    const w = { hw, launch, back, key, h: e.h, reasons: [], why: [], status: 'go', atDawn: launch > first, atDusk: back < last };
     const st = conditions(launch, back);
     if (!st) return null;
     Object.assign(w, st);
 
-    const bad = r => { w.status = 'no'; w.reasons.push(r); };
-    const warn = r => { if (w.status === 'go') w.status = 'maybe'; w.reasons.push(r); };
-    if (w.h < S.tideMin) bad(`high water is only ${w.h.toFixed(1)} m, under your ${S.tideMin} m`);
+    // Each reason carries how serious it is, 4 (wind over the limits) down to 1 (only not worth going).
+    const note = (r, n) => { w.reasons.push(r); w.why.push({ t: r, sev: n }); };
+    const bad = (r, n) => { w.status = 'no'; note(r, n); };
+    const warn = (r, n) => { if (w.status === 'go') w.status = 'maybe'; note(r, n); };
+    if (w.h < S.tideMin) bad(`high water is only ${w.h.toFixed(1)} m, under your ${S.tideMin} m`, 1);
     const slot = Math.round((back - launch) / MIN);
-    if (slot < S.slotMin) bad(`only ${slot} minutes of daylight in the window, under your ${S.slotMin}`);
-    if (w.wind > S.windMax) bad(`wind over your ${S.windMax} knot limit`);
-    else if (w.gust > S.gustMax) bad(`gusts over your ${S.gustMax} knot limit`);
-    else if (w.wind < S.windMin) warn('very light wind');
-    if (w.wave > S.waveMax) bad(`waves over your ${S.waveMax} m limit`);
-    if (w.swell > S.swellMax) bad(`swell over your ${S.swellMax} m limit`);
-    else if (w.swell > 0.2 && w.swellPeriod > S.periodMax) warn(`long ${Math.round(w.swellPeriod)} second swell, which breaks hard on the ${site.estuary ? 'bar' : 'shore'}`);
-    if (w.wave == null) warn('no wave forecast');
+    if (slot < S.slotMin) bad(`only ${slot} minutes of daylight in the window, under your ${S.slotMin}`, 1);
+    if (w.wind > S.windMax) bad(`wind over your ${S.windMax} knot limit`, 4);
+    else if (w.gust > S.gustMax) bad(`gusts over your ${S.gustMax} knot limit`, 4);
+    else if (w.wind < S.windMin) warn('very light wind', 1);
+    if (w.wave > S.waveMax) bad(`waves over your ${S.waveMax} m limit`, 3);
+    if (w.swell > S.swellMax) bad(`swell over your ${S.swellMax} m limit`, 3);
+    else if (w.swell > 0.2 && w.swellPeriod > S.periodMax) warn(`long ${Math.round(w.swellPeriod)} second swell, which breaks hard on the ${site.estuary ? 'bar' : 'shore'}`, 2);
+    if (w.wave == null) warn('no wave forecast', 1);
     // The ebb warnings only matter when the trip starts inside the estuary.
-    if (site.estuary && w.wind >= 10 && angDiff(w.dir, SEAWARD) <= 50) warn('onshore wind against the ebb after high water, choppy towards the bar');
-    if (w.wind >= 8 && angDiff(w.dir, (site.seaward + 180) % 360) <= 50) warn('offshore wind, so it is a beat home');
-    if (w.rain > 3) warn('wet');
-    if (site.estuary && river[key] > HIGH_FLOW) warn('river running high, so the ebb starts early and runs hard');
+    if (site.estuary && w.wind >= 10 && angDiff(w.dir, SEAWARD) <= 50) warn('onshore wind against the ebb after high water, choppy towards the bar', 2);
+    if (w.wind >= 8 && angDiff(w.dir, (site.seaward + 180) % 360) <= 50) warn('offshore wind, so it is a beat home', 2);
+    if (w.rain > 3) warn('wet', 1);
+    if (site.estuary && river[key] > HIGH_FLOW) warn('river running high, so the ebb starts early and runs hard', 2);
     return w;
   }).filter(Boolean);
 }
@@ -458,6 +467,24 @@ function dayName(key, now) {
 }
 
 function windText(w) { return `${compass(w.dir)} ${w.wind} knots, gusting ${w.gust}`; }
+
+/* A No, with each figure and reason coloured by how serious it is and the worst reasons first. */
+const sev = (n, text) => `<span class="s${n}">${text}</span>`;
+function gradedLine(w) {
+  let sea = '';
+  if (w.wave != null) {
+    sea = ' ' + sev(w.wave > S.waveMax ? 3 : 0, `Waves ${w.wave.toFixed(1)}&nbsp;m`);
+    if (w.swell != null) sea += ', ' + sev(w.swell > S.swellMax ? 3 : w.swell > 0.2 && w.swellPeriod > S.periodMax ? 2 : 0,
+      `swell ${w.swell.toFixed(1)}&nbsp;m at ${Math.round(w.swellPeriod)}&nbsp;seconds`);
+    sea += '.';
+  }
+  const why = w.why.slice().sort((a, b) => b.sev - a.sev)
+    .map((r, i) => sev(r.sev, esc(i ? r.t : r.t[0].toUpperCase() + r.t.slice(1)))).join('; ');
+  return `Launch ${hm(w.launch)}${w.atDawn ? ' (sunrise)' : ''}, high water ${hm(w.hw)} at ${sev(w.h < S.tideMin ? 1 : 0, w.h.toFixed(1) + '&nbsp;m')}, ` +
+    `back by ${hm(w.back)}${w.atDusk ? ' (dusk)' : ''}. ` +
+    `${sev(w.wind > S.windMax ? 4 : w.wind < S.windMin ? 1 : 0, `${compass(w.dir)} ${w.wind}&nbsp;knots`)}, ${sev(w.gust > S.gustMax ? 4 : 0, `gusting&nbsp;${w.gust}`)}.` +
+    `${sea}${why ? ' ' + why + '.' : ''}`;
+}
 function seaText(w) {
   if (w.wave == null) return '';
   return ` Waves ${w.wave.toFixed(1)} m` + (w.swell != null ? `, swell ${w.swell.toFixed(1)} m at ${Math.round(w.swellPeriod)} seconds.` : '.');
@@ -548,7 +575,8 @@ function renderDays(wins, now) {
     }
 
     const label = { go: 'Good', maybe: 'Marginal', no: 'No' };
-    const list = dayWins.length ? dayWins.map(w =>
+    const list = dayWins.length ? dayWins.map(w => w.status === 'no'
+      ? `<li class="no w${Math.max(0, ...w.why.map(r => r.sev))}"><b>No.</b> ${gradedLine(w)}</li>` :
       `<li class="${w.status}"><b>${label[w.status]}.</b> Launch ${hm(w.launch)}${w.atDawn ? ' (sunrise)' : ''}, high water ${hm(w.hw)} at ${w.h.toFixed(1)} m, back by ${hm(w.back)}${w.atDusk ? ' (dusk)' : ''}. ` +
       `${windText(w)}.${seaText(w)}${w.reasons.length ? ' ' + esc(w.reasons.join('; ')).replace(/^./, c => c.toUpperCase()) + '.' : ''}</li>`
     ).join('') : '<li class="no">High water falls in the dark.</li>';
