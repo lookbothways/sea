@@ -15,6 +15,8 @@
   --water:#B4D5E7; --water-line:#2F6F97;
   --mark:#A3238E;
   --go:#22764A; --maybe:#A86A0C; --strong:#B4483C;
+  /* How serious a reason is, worst first: wind, sea, tricky water, not worth going, fine. All dark enough to read on white. */
+  --sev4:#8E1F1B; --sev3:#A13E16; --sev2:#8F5E0E; --sev1:#666A1E; --sev0:#1D6A3C;
   --sea:#DCECF5; --land:#F6F1DC; --land-line:#D6CCA2; --route:#123F66;
 }
 *{box-sizing:border-box}
@@ -74,12 +76,27 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
 .w.ok{background:color-mix(in srgb,var(--go) 16%,transparent); color:var(--ink)}
 .w.strong{background:color-mix(in srgb,var(--strong) 24%,transparent); color:var(--ink)}
 .w i{display:inline-block; font-style:normal; margin-left:.15rem}
+/* Rain under the wind, in the same three-hour blocks. A dry block is plain white. The colours follow the usual
+   rain-radar order, each dark enough for the white figure to read. */
+.rain{display:grid; grid-template-columns:repeat(8,1fr); gap:1px; margin-top:1px; container-type:inline-size}
+.r{height:1.05rem; line-height:1.05rem; text-align:center; font-size:.75rem; border-radius:2px; color:#fff; background:#fff; white-space:nowrap; overflow:hidden}
+.r small{font-size:.6rem; margin-left:.15rem}
+/* On a phone the blocks are too narrow for figure and unit side by side, so the unit drops underneath. */
+@container (max-width:27rem){ .r{height:1.6rem; line-height:.9rem} .r small{display:block; margin:0; line-height:.6rem} }
+.r1{background:#4A72BE} .r2{background:#3050B4} .r3{background:#1F8086} .r4{background:#3D7F23}
+.r5{background:#8F7400} .r6{background:#B5560F} .r7{background:#BA2A52} .r8{background:#7C40BA}
 .axis{display:flex; justify-content:space-between; font-size:.75rem; color:var(--muted)}
 
 .wins{list-style:none; margin:.5rem 0 0; padding:0}
 .wins li{padding:.25rem 0 .25rem .9rem; border-left:3px solid var(--rule); margin-top:.3rem}
 .wins li.go{border-color:var(--go)} .wins li.maybe{border-color:var(--maybe)}
 .wins li.no{color:var(--muted)}
+.s4{color:var(--sev4); font-weight:600} .s3{color:var(--sev3); font-weight:600}
+.s2{color:var(--sev2)} .s1{color:var(--sev1)} .s0{color:var(--sev0)}
+.wins li.no.w4{border-color:var(--sev4)} .wins li.no.w3{border-color:var(--sev3)}
+.wins li.no.w2{border-color:var(--sev2)} .wins li.no.w1{border-color:var(--sev1)}
+/* A Marginal uses two colours only: whatever makes it marginal, and what is fine. */
+.wins li.maybe .s1{color:var(--sev2)}
 .dayhead{display:flex; align-items:baseline; flex-wrap:wrap; gap:.3rem .8rem}
 .simbtn{margin:0 0 0 auto; padding:.1rem .7rem; font-size:.9rem}
 .simbtn[aria-expanded="true"]{background:var(--ink); color:var(--paper); border-color:var(--ink)}
@@ -148,18 +165,42 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
 .wins b{font-weight:600}
 .wins li.go b{color:var(--go)} .wins li.maybe b{color:var(--maybe)}
 
-.page{max-width:54rem; margin:0 auto; padding:3.6rem 1rem 3rem}
+.page{max-width:54rem; margin:0 auto; padding:9.6rem 1rem 3rem}
 .side-toggle{position:fixed; top:.6rem; left:.6rem; z-index:3; margin:0; background:var(--paper)}
 .side-toggle::before{content:"\203A"; display:inline-block; margin-right:.4rem; transition:transform .2s}
 .side-open .side-toggle::before{transform:rotate(180deg)}
 .side{
   position:fixed; z-index:2; top:0; left:0; bottom:0; width:17rem;
-  padding:3.6rem 1rem 1.5rem; overflow-y:auto;
+  padding:9.6rem 1rem 1.5rem; overflow-y:auto;
   background:var(--paper); border-right:1px solid var(--rule);
   transform:translateX(-100%); visibility:hidden;
   transition:transform .2s, visibility 0s .2s;
 }
-.side::before{content:""; display:block; position:sticky; top:-3.6rem; z-index:1; height:3.6rem; margin:-3.6rem -1rem 0; background:var(--paper)}
+.side::before{content:""; display:block; position:sticky; top:-9.6rem; z-index:1; height:9.6rem; margin:-9.6rem -1rem 0; background:var(--paper)}
+/* Boat size sits under the button whether the sidebar is open or shut. Shut, it scrolls away with the page;
+   open, or on a screen wide enough to have room beside the page, it stays put. */
+.boatsize{position:absolute; z-index:3; top:3.3rem; left:1rem; width:15rem; font-size:.92rem}
+.side-open .boatsize{position:fixed}
+.boatsize label{display:block}
+.boatsize input{
+  -webkit-appearance:none; appearance:none; display:block; width:100%; height:1.5rem; margin:.15rem 0 0; padding:0;
+  border:0; border-radius:0; background:transparent; cursor:pointer;
+}
+.boatsize input::-webkit-slider-runnable-track{height:4px; border-radius:2px; background:var(--rule)}
+.boatsize input::-moz-range-track{height:4px; border-radius:2px; background:var(--rule)}
+.boatsize input::-webkit-slider-thumb{
+  -webkit-appearance:none; width:1.1rem; height:1.1rem; margin-top:calc(2px - .55rem);
+  border:2px solid var(--paper); border-radius:50%; background:var(--ink); box-shadow:0 0 0 1px var(--ink);
+}
+.boatsize input::-moz-range-thumb{
+  width:.85rem; height:.85rem; border:2px solid var(--paper); border-radius:50%; background:var(--ink); box-shadow:0 0 0 1px var(--ink);
+}
+.notches{display:flex; justify-content:space-between; margin-top:-.3rem; padding:0 calc(.55rem - 1px)}
+.notches i{width:2px; height:.4rem; background:var(--muted)}
+.boatsize p{margin:.35rem 0 0; line-height:1.3}
+.boatsize p b{display:block; font-weight:600}
+.boatsize p span{color:var(--muted)}
+@media (min-width:88rem){ .boatsize{position:fixed} .page{padding-top:3.6rem} }
 .side-open .side{transform:none; visibility:visible; transition:transform .2s}
 @media (min-width:64rem){ .side-open{padding-left:17rem} }
 @media (prefers-reduced-motion:reduce){ body,.side,.side-toggle::before{transition:none} }
@@ -168,9 +209,10 @@ label{display:block; font-size:.92rem}
 label span{display:block}
 .fields input{display:inline-block; vertical-align:middle}
 .delta{margin-left:.5rem; color:var(--strong); font-weight:600; white-space:nowrap}
-.side button{display:block}
-#massage{margin-top:.6rem}
-.massage-note{margin:.6rem 0 0; font-size:.88rem; color:var(--muted)}
+.side-actions{display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:.9rem}
+.side-actions button{margin:0}
+.massage-note{margin:0 0 .9rem; font-size:.88rem; color:var(--muted)}
+.massage-note:empty{display:none}
 input{
   display:block; width:6rem; margin-top:.2rem; padding:.3rem .4rem;
   font:inherit; color:inherit; background:transparent;
@@ -189,7 +231,18 @@ footer p{margin:.4rem 0}
 <body>
 
 <button id="sideToggle" class="side-toggle" type="button" aria-expanded="false" aria-controls="side">Limits and timings</button>
+<div class="boatsize">
+  <label for="boat">Boat size</label>
+  <input type="range" id="boat" min="0" max="4" step="1" value="0">
+  <div class="notches" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+  <p id="boatName" aria-live="polite"></p>
+</div>
 <aside id="side" class="side" aria-label="Limits and timings">
+  <div class="side-actions">
+    <button id="massage" type="button">Massage</button>
+    <button id="reset" type="button">Reset to defaults</button>
+  </div>
+  <p id="massageNote" class="massage-note" aria-live="polite"></p>
   <div class="fields">
     <label><span>Lightest wind worth going, knots</span><input type="number" id="windMin" min="0" max="20"><b class="delta" id="d-windMin"></b></label>
     <label><span>Strongest steady wind, knots</span><input type="number" id="windMax" min="5" max="30"><b class="delta" id="d-windMax"></b></label>
@@ -203,9 +256,6 @@ footer p{margin:.4rem 0}
     <label><span>Longest swell period before it is marginal, seconds</span><input type="number" id="periodMax" min="4" max="20"><b class="delta" id="d-periodMax"></b></label>
     <label><span id="offsetLbl">High water at Patch is this much later than predicted, minutes</span><input type="number" id="offset" min="-120" max="180" step="5"><b class="delta" id="d-offset"></b></label>
   </div>
-  <button id="reset" type="button">Reset to defaults</button>
-  <button id="massage" type="button">Massage</button>
-  <p id="massageNote" class="massage-note" aria-live="polite"></p>
 </aside>
 
 <div class="page">
@@ -224,6 +274,7 @@ footer p{margin:.4rem 0}
 <footer>
   <p id="tideSource"></p>
   <p>Wind, rain, daylight, waves, swell and river flow from Open-Meteo. The wave figures are a forecast for the open bay off Cardigan Island. Solid green is inside your limits, hatched amber is marginal.</p>
+  <p>On a No, the figures and reasons are coloured by how serious they are: dark red for wind over your limits, rust for waves or swell over them, ochre for awkward stream, swell or wind direction, olive for things that only make it not worth going, and green for what is fine. On a Marginal, whatever makes it marginal is ochre and the rest is green.</p>
   <p>This is a planning aid. After high water the ebb at Patch runs out over the bar to open sea, so look at the water and the wind before you launch.</p>
 </footer>
 
@@ -241,8 +292,23 @@ const TZ = 'Europe/London';
 const MIN = 60000;
 const SEA = { lat: 52.13, lon: -4.72 };      // open water in the bay, for waves and the fallback tide
 const MODEL_DATUM = 2.6;                     // assumed mean sea level above chart datum at Port Cardigan, metres
-const DEFAULTS = { windMin: 4, windMax: 14, gustMax: 20, tideMin: 3.6, lead: 120, ret: 120, slotMin: 120, waveMax: 0.7, swellMax: 0.5, periodMax: 10, offset: 0 };
 const STORE = 'patch-launch-3';
+/* Boat size: five boats sailed on this coast, smallest to largest, each with its own wind, tide, wave and swell limits.
+   The Topper's are the original defaults. The rest are estimates still to be checked with people who sail boats that size:
+   wind limits step up through the Beaufort forces, wave and swell limits stay well under each boat's design category
+   because of the bar, and the two keelboats need more tide for their draught (0.9 m and 1.95 m). */
+const BOATS = [
+  { name: 'Topper', kind: '3.4 m single-handed dinghy', lim: { windMin: 4, windMax: 14, gustMax: 20, tideMin: 3.6, waveMax: 0.7, swellMax: 0.5 } },
+  { name: 'Wayfarer', kind: '4.8 m two-person dinghy', lim: { windMin: 4, windMax: 16, gustMax: 22, tideMin: 3.6, waveMax: 0.8, swellMax: 0.6 } },
+  { name: 'Drascombe Lugger', kind: '5.7 m open dayboat', lim: { windMin: 5, windMax: 17, gustMax: 24, tideMin: 3.6, waveMax: 0.9, swellMax: 0.7 } },
+  { name: 'Westerly Centaur', kind: '7.9 m (26 ft) bilge-keel cruiser', lim: { windMin: 6, windMax: 21, gustMax: 28, tideMin: 3.9, waveMax: 1.3, swellMax: 0.9 } },
+  { name: '36 ft cruising yacht', kind: '11 m fin keel, like a Bavaria 36', lim: { windMin: 7, windMax: 24, gustMax: 32, tideMin: 4.4, waveMax: 1.8, swellMax: 1.2 } }
+];
+const BOAT_STORE = STORE + '-boat';
+let boatNo = 0;
+try { const b = parseInt(localStorage.getItem(BOAT_STORE), 10); if (b >= 0 && b < BOATS.length) boatNo = b; } catch (e) { /* Topper */ }
+// The defaults follow the boat. The timings, swell period and offset are the same for every boat.
+const DEFAULTS = Object.assign({ windMin: 4, windMax: 14, gustMax: 20, tideMin: 3.6, lead: 120, ret: 120, slotMin: 120, waveMax: 0.7, swellMax: 0.5, periodMax: 10, offset: 0 }, BOATS[boatNo].lim);
 
 const S = Object.assign({}, DEFAULTS, readStore());
 let hours = [], seas = [], sun = {}, tide = null, river = {}, weatherError = false;
@@ -421,28 +487,30 @@ function buildWindows() {
     const first = hw - S.lead * MIN, last = hw + S.ret * MIN;
     const launch = Math.max(first, sn.rise), back = Math.min(last, sn.set - 30 * MIN);
     if (back - launch < 15 * MIN || back > lastHour + 60 * MIN) return null;   // dark, or beyond the forecast
-    const w = { hw, launch, back, key, h: e.h, reasons: [], status: 'go', atDawn: launch > first, atDusk: back < last };
+    const w = { hw, launch, back, key, h: e.h, reasons: [], why: [], status: 'go', atDawn: launch > first, atDusk: back < last };
     const st = conditions(launch, back);
     if (!st) return null;
     Object.assign(w, st);
 
-    const bad = r => { w.status = 'no'; w.reasons.push(r); };
-    const warn = r => { if (w.status === 'go') w.status = 'maybe'; w.reasons.push(r); };
-    if (w.h < S.tideMin) bad(`high water is only ${w.h.toFixed(1)} m, under your ${S.tideMin} m`);
+    // Each reason carries how serious it is, 4 (wind over the limits) down to 1 (only not worth going).
+    const note = (r, n) => { w.reasons.push(r); w.why.push({ t: r, sev: n }); };
+    const bad = (r, n) => { w.status = 'no'; note(r, n); };
+    const warn = (r, n) => { if (w.status === 'go') w.status = 'maybe'; note(r, n); };
+    if (w.h < S.tideMin) bad(`high water is only ${w.h.toFixed(1)} m, under your ${S.tideMin} m`, 1);
     const slot = Math.round((back - launch) / MIN);
-    if (slot < S.slotMin) bad(`only ${slot} minutes of daylight in the window, under your ${S.slotMin}`);
-    if (w.wind > S.windMax) bad(`wind over your ${S.windMax} knot limit`);
-    else if (w.gust > S.gustMax) bad(`gusts over your ${S.gustMax} knot limit`);
-    else if (w.wind < S.windMin) warn('very light wind');
-    if (w.wave > S.waveMax) bad(`waves over your ${S.waveMax} m limit`);
-    if (w.swell > S.swellMax) bad(`swell over your ${S.swellMax} m limit`);
-    else if (w.swell > 0.2 && w.swellPeriod > S.periodMax) warn(`long ${Math.round(w.swellPeriod)} second swell, which breaks hard on the ${site.estuary ? 'bar' : 'shore'}`);
-    if (w.wave == null) warn('no wave forecast');
+    if (slot < S.slotMin) bad(`only ${slot} minutes of daylight in the window, under your ${S.slotMin}`, 1);
+    if (w.wind > S.windMax) bad(`wind over your ${S.windMax} knot limit`, 4);
+    else if (w.gust > S.gustMax) bad(`gusts over your ${S.gustMax} knot limit`, 4);
+    else if (w.wind < S.windMin) warn('very light wind', 1);
+    if (w.wave > S.waveMax) bad(`waves over your ${S.waveMax} m limit`, 3);
+    if (w.swell > S.swellMax) bad(`swell over your ${S.swellMax} m limit`, 3);
+    else if (w.swell > 0.2 && w.swellPeriod > S.periodMax) warn(`long ${Math.round(w.swellPeriod)} second swell, which breaks hard on the ${site.estuary ? 'bar' : 'shore'}`, 2);
+    if (w.wave == null) warn('no wave forecast', 1);
     // The ebb warnings only matter when the trip starts inside the estuary.
-    if (site.estuary && w.wind >= 10 && angDiff(w.dir, SEAWARD) <= 50) warn('onshore wind against the ebb after high water, choppy towards the bar');
-    if (w.wind >= 8 && angDiff(w.dir, (site.seaward + 180) % 360) <= 50) warn('offshore wind, so it is a beat home');
-    if (w.rain > 3) warn('wet');
-    if (site.estuary && river[key] > HIGH_FLOW) warn('river running high, so the ebb starts early and runs hard');
+    if (site.estuary && w.wind >= 10 && angDiff(w.dir, SEAWARD) <= 50) warn('onshore wind against the ebb after high water, choppy towards the bar', 2);
+    if (w.wind >= 8 && angDiff(w.dir, (site.seaward + 180) % 360) <= 50) warn('offshore wind, so it is a beat home', 2);
+    if (w.rain > 3) warn('wet', 1);
+    if (site.estuary && river[key] > HIGH_FLOW) warn('river running high, so the ebb starts early and runs hard', 2);
     return w;
   }).filter(Boolean);
 }
@@ -458,6 +526,27 @@ function dayName(key, now) {
 }
 
 function windText(w) { return `${compass(w.dir)} ${w.wind} knots, gusting ${w.gust}`; }
+
+// Where each rain colour starts, in millimetres an hour.
+const RAIN_STEPS = [0.1, 0.3, 0.7, 1.5, 3, 6, 12, 24];
+
+/* A No or a Marginal, with each figure and reason coloured by how serious it is and the worst reasons first. */
+const sev = (n, text) => `<span class="s${n}">${text}</span>`;
+function gradedLine(w) {
+  let sea = '';
+  if (w.wave != null) {
+    sea = ' ' + sev(w.wave > S.waveMax ? 3 : 0, `Waves ${w.wave.toFixed(1)}&nbsp;m`);
+    if (w.swell != null) sea += ', ' + sev(w.swell > S.swellMax ? 3 : w.swell > 0.2 && w.swellPeriod > S.periodMax ? 2 : 0,
+      `swell ${w.swell.toFixed(1)}&nbsp;m at ${Math.round(w.swellPeriod)}&nbsp;seconds`);
+    sea += '.';
+  }
+  const why = w.why.slice().sort((a, b) => b.sev - a.sev)
+    .map((r, i) => sev(r.sev, esc(i ? r.t : r.t[0].toUpperCase() + r.t.slice(1)))).join('; ');
+  return `Launch ${hm(w.launch)}${w.atDawn ? ' (sunrise)' : ''}, high water ${hm(w.hw)} at ${sev(w.h < S.tideMin ? 1 : 0, w.h.toFixed(1) + '&nbsp;m')}, ` +
+    `back by ${hm(w.back)}${w.atDusk ? ' (dusk)' : ''}. ` +
+    `${sev(w.wind > S.windMax ? 4 : w.wind < S.windMin ? 1 : 0, `${compass(w.dir)} ${w.wind}&nbsp;knots`)}, ${sev(w.gust > S.gustMax ? 4 : 0, `gusting&nbsp;${w.gust}`)}.` +
+    `${sea}${why ? ' ' + why + '.' : ''}`;
+}
 function seaText(w) {
   if (w.wave == null) return '';
   return ` Waves ${w.wave.toFixed(1)} m` + (w.swell != null ? `, swell ${w.swell.toFixed(1)} m at ${Math.round(w.swellPeriod)} seconds.` : '.');
@@ -538,17 +627,25 @@ function renderDays(wins, now) {
     });
     if (key === today.key) track += `<div class="now" style="left:${pct(today.mins)}" title="Now"></div>`;
 
-    let wind = '';
+    let wind = '', rain = '';
     for (let b = 0; b < 8; b++) {
       const hs = byDay[key].filter(h => h.mins >= b * 180 && h.mins < (b + 1) * 180);
-      if (!hs.length) { wind += '<div class="w"></div>'; continue; }
+      if (!hs.length) { wind += '<div class="w"></div>'; rain += '<div class="r"></div>'; continue; }
+      // Rain is shown as the wettest hour of the block, in millimetres an hour.
+      const mm = Math.max(...hs.map(h => h.rain)), sum = hs.reduce((a, h) => a + h.rain, 0);
+      const lvl = RAIN_STEPS.filter(v => mm >= v).length;
+      rain += lvl ? `<div class="r r${lvl}" title="Up to ${mm.toFixed(1)} mm an hour, ${sum.toFixed(1)} mm in the three hours">${mm < 10 ? mm.toFixed(1) : Math.round(mm)}<small>mm/hr</small></div>`
+        : '<div class="r" title="Dry"></div>';
       const sp = Math.round(mean(hs.map(h => h.wind))), g = Math.max(...hs.map(h => h.gust)), dir = hs[Math.floor(hs.length / 2)].dir;
       const cls = sp > S.windMax || g > S.gustMax ? 'strong' : sp < S.windMin ? '' : 'ok';
       wind += `<div class="w ${cls}" title="${compass(dir)} ${sp} knots, gusts ${Math.round(g)}">${sp}<i style="transform:rotate(${Math.round(dir + 180)}deg)">↑</i></div>`;
     }
 
     const label = { go: 'Good', maybe: 'Marginal', no: 'No' };
-    const list = dayWins.length ? dayWins.map(w =>
+    // No lines are coloured by severity. Marginal lines use the same line in two colours; nothing on one can reach the bold levels.
+    const list = dayWins.length ? dayWins.map(w => w.status === 'no'
+      ? `<li class="no w${Math.max(0, ...w.why.map(r => r.sev))}"><b>No.</b> ${gradedLine(w)}</li>` :
+      w.status === 'maybe' ? `<li class="maybe"><b>Marginal.</b> ${gradedLine(w)}</li>` :
       `<li class="${w.status}"><b>${label[w.status]}.</b> Launch ${hm(w.launch)}${w.atDawn ? ' (sunrise)' : ''}, high water ${hm(w.hw)} at ${w.h.toFixed(1)} m, back by ${hm(w.back)}${w.atDusk ? ' (dusk)' : ''}. ` +
       `${windText(w)}.${seaText(w)}${w.reasons.length ? ' ' + esc(w.reasons.join('; ')).replace(/^./, c => c.toUpperCase()) + '.' : ''}</li>`
     ).join('') : '<li class="no">High water falls in the dark.</li>';
@@ -558,6 +655,7 @@ function renderDays(wins, now) {
     return `<section class="day"><div class="dayhead"><h2>${rel ? rel[0].toUpperCase() + rel.slice(1) + ', ' : ''}${title}<span>light ${hm(sn.rise)} to ${hm(sn.set)}</span></h2>` +
       `<button type="button" class="simbtn" data-sim="${key}" aria-expanded="false" aria-controls="sim-${key}"${dayWins.length && tide ? '' : ' disabled'}>Simulate</button></div>` +
       `<div class="track">${track}</div><div class="wind" aria-label="Wind in knots, three-hour blocks">${wind}</div>` +
+      `<div class="rain" aria-label="Rain in millimetres an hour, three-hour blocks">${rain}</div>` +
       `<div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>` +
       `<ul class="wins">${list}</ul><div class="sim" id="sim-${key}" hidden></div></section>`;
   }).join('');
@@ -921,8 +1019,8 @@ function applyLaunch(L, key) {
 
 /* The route. Untouched, it is the standard loop round Cardigan Island, taken
    whichever way round is quicker. Once a crosshair has been moved or added it runs
-   from the launch to the furthest point, then through the numbered points in order, and home. */
-let simPts = { fp: null, p2: null, more: [] }, simAdding = false;
+   from the launch through the numbered points in order, and home. */
+let simPts = { fp: null, p2: null, more: [] }, simAdding = false;   // fp is point 1, more holds points 3 on
 const touched = () => !!(simPts.fp || simPts.p2 || simPts.more.length);
 const RING = ['S2', 'I1', 'I2', 'I3', 'I4', 'I5', 'K', 'I6'];   // the loop round the island
 const pathLen = pts => pts.reduce((s, p, i) => s + (i ? gap(pts[i - 1], p) : 0), 0);
@@ -952,7 +1050,7 @@ function planRoute(w) {
     });
     r = b.ok && (!a.ok || b.end < a.end) ? b : a;
   } else {
-    // The launch, the furthest point, then point 2 if it has been placed, then points 3, 4 and so on, then home.
+    // The launch, point 1, then point 2 if it has been placed, then points 3, 4 and so on, then home.
     const stops = [L, simPts.fp || NODE.I3].concat(simPts.p2 ? [simPts.p2] : [], simPts.more, [L]);
     const used = new Set();
     let pts = [L], fpIndex = 0;
@@ -1065,7 +1163,8 @@ function openSim(key, quiet) {
     `<p class="sim-read"><span>Wind <b></b></span><span>Stream <b></b></span><span>Boat <b></b></span><span>Tacks <b></b></span></p>` +
     `<p class="sim-note"><span class="sim-hint" aria-live="polite"></span> ` +
     `This is a sketch of what the day allows, not a passage plan. The coastline is simplified (© OpenStreetMap contributors), ` +
-    `no depths or sandbanks are modelled, and the stream and boat speeds are estimates. Each circle is a tack.</p>`;
+    `no depths or sandbanks are modelled, and the stream and boat speeds are estimates. ` +
+    `${boatNo ? 'The simulated boat sails like a Topper whatever the boat size is set to. ' : ''}Each circle is a tack.</p>`;
   box.hidden = false;
 
   // On the day's strip, a bar from the launch time to when this route gets home.
@@ -1128,7 +1227,7 @@ function openSim(key, quiet) {
   /* Crosshairs. A tap or click on the map moves the nearest one there, or adds a new
      one while adding is switched on. With a mouse they can also be dragged. Nothing
      is recalculated until Resimulate is pressed. Point 2 is only a suggestion, half
-     way to the next stop, until it has been moved itself.
+     way from point 1 to the next stop, until it has been moved or added.
      The launch crosshair is moved on its own: drag it, or click or tap it to pick it
      up and then click or tap where it should go. It snaps to the nearest shore. */
   const mapEl = q('.map'), hint = q('.sim-hint'), addBtn = q('.sim-add');
@@ -1141,7 +1240,7 @@ function openSim(key, quiet) {
   };
   if (touched()) setGhost(); else ghost = halfWay(plan ? plan.pts.slice(plan.fpIndex) : [fpPos(), S0]);
 
-  const items = () => [{ k: 'fp', label: 'Furthest point', p: fpPos() }, { k: 'p2', label: 'Point 2', p: simPts.p2 || ghost, auto: !simPts.p2 }]
+  const items = () => [{ k: 'fp', label: 'Point 1', p: fpPos() }, { k: 'p2', label: 'Point 2', p: simPts.p2 || ghost, auto: !simPts.p2 }]
     .concat(simPts.more.map((p, i) => ({ k: i, label: 'Point ' + (i + 3), p })));
   const place = (el, p) => {
     el.style.left = (p.x / MW * 100).toFixed(2) + '%';
@@ -1154,7 +1253,7 @@ function openSim(key, quiet) {
   };
   const say = () => {
     hint.textContent = carrying ? 'Now click or tap where you launch from. It snaps to the nearest shore.'
-      : simAdding ? 'Tap the map to add a crosshair.'
+      : simAdding ? 'Tap the map to add the next point.'
       : 'Tap the map to move the nearest crosshair there, or tap the launch crosshair to move the launch, then press Resimulate.';
     addBtn.textContent = simAdding ? 'Stop adding crosshairs' : 'Add more crosshairs';
     addBtn.setAttribute('aria-pressed', String(simAdding));
@@ -1176,14 +1275,10 @@ function openSim(key, quiet) {
     if (k === 'fp' || k === 'p2') simPts[k] = { x: p.x, y: p.y }; else simPts.more[k] = { x: p.x, y: p.y };
     changed();
   }
-  function addPoint(p) {              // add a new one, which takes over as furthest point if it is further from the launch
+  function addPoint(p) {              // add the next numbered point; the first one added becomes point 2
     if (onLand(p)) return;
     if (simPts.more.length >= 10) { hint.textContent = 'That is as many crosshairs as the map takes.'; return; }
-    const far = fpPos();
-    if (gap(p, home()) > gap(far, home())) {
-      if (simPts.p2) simPts.more.unshift(simPts.p2);
-      simPts.p2 = { x: far.x, y: far.y }; simPts.fp = { x: p.x, y: p.y };
-    } else simPts.more.push({ x: p.x, y: p.y });
+    if (!simPts.p2) simPts.p2 = { x: p.x, y: p.y }; else simPts.more.push({ x: p.x, y: p.y });
     changed();
   }
   /* ----- the launch crosshair ----- */
@@ -1408,17 +1503,34 @@ $('massage').addEventListener('click', () => {
     : `Set for ${dayFmt.format(best.hw)}, high water ${hm(best.hw)}. Red shows how far each limit had to move from its default.`;
 });
 
+/* ---------- boat size ---------- */
+function showBoat() {
+  const b = BOATS[boatNo];
+  $('boat').value = boatNo;
+  $('boat').setAttribute('aria-valuetext', `${b.name}, ${b.kind}`);
+  $('boatName').innerHTML = `<b>${esc(b.name)}</b><span>${esc(b.kind)}</span>`;
+}
+showBoat();
+// Moving the slider sets that boat's limits as you drag, and they become what Reset and Massage start from.
+$('boat').addEventListener('input', e => {
+  const b = +e.target.value;
+  if (b === boatNo || !BOATS[b]) return;
+  boatNo = b;
+  try { localStorage.setItem(BOAT_STORE, String(boatNo)); } catch (e2) { /* lasts for this visit only */ }
+  Object.assign(DEFAULTS, BOATS[boatNo].lim);
+  massaged = false; $('massageNote').textContent = '';
+  showBoat();
+  setAll(BOATS[boatNo].lim);
+});
+
 /* ---------- sidebar ---------- */
-const SIDE = STORE + '-side';
-function setSide(open, remember) {
+// Shut on every page load; boat size stays in view above it.
+function setSide(open) {
   document.body.classList.toggle('side-open', open);
   $('sideToggle').setAttribute('aria-expanded', String(open));
-  if (remember) { try { localStorage.setItem(SIDE, open ? '1' : '0'); } catch (e) { /* not saved */ } }
 }
-let sideOpen = window.matchMedia('(min-width:64rem)').matches;
-try { const v = localStorage.getItem(SIDE); if (v != null) sideOpen = v === '1'; } catch (e) { /* use default */ }
-setSide(sideOpen, false);
-$('sideToggle').addEventListener('click', () => setSide(!document.body.classList.contains('side-open'), true));
+setSide(false);
+$('sideToggle').addEventListener('click', () => setSide(!document.body.classList.contains('side-open')));
 
 refresh();
 setInterval(refresh, 60 * 60 * 1000);
