@@ -86,6 +86,8 @@ h1.go{color:var(--go)} h1.maybe{color:var(--maybe)}
 .s2{color:var(--sev2)} .s1{color:var(--sev1)} .s0{color:var(--sev0)}
 .wins li.no.w4{border-color:var(--sev4)} .wins li.no.w3{border-color:var(--sev3)}
 .wins li.no.w2{border-color:var(--sev2)} .wins li.no.w1{border-color:var(--sev1)}
+/* A Marginal uses two colours only: whatever makes it marginal, and what is fine. */
+.wins li.maybe .s1{color:var(--sev2)}
 .dayhead{display:flex; align-items:baseline; flex-wrap:wrap; gap:.3rem .8rem}
 .simbtn{margin:0 0 0 auto; padding:.1rem .7rem; font-size:.9rem}
 .simbtn[aria-expanded="true"]{background:var(--ink); color:var(--paper); border-color:var(--ink)}
@@ -230,7 +232,7 @@ footer p{margin:.4rem 0}
 <footer>
   <p id="tideSource"></p>
   <p>Wind, rain, daylight, waves, swell and river flow from Open-Meteo. The wave figures are a forecast for the open bay off Cardigan Island. Solid green is inside your limits, hatched amber is marginal.</p>
-  <p>On a No, the figures and reasons are coloured by how serious they are: dark red for wind over your limits, rust for waves or swell over them, ochre for awkward stream, swell or wind direction, olive for things that only make it not worth going, and green for what is fine.</p>
+  <p>On a No, the figures and reasons are coloured by how serious they are: dark red for wind over your limits, rust for waves or swell over them, ochre for awkward stream, swell or wind direction, olive for things that only make it not worth going, and green for what is fine. On a Marginal, whatever makes it marginal is ochre and the rest is green.</p>
   <p>This is a planning aid. After high water the ebb at Patch runs out over the bar to open sea, so look at the water and the wind before you launch.</p>
 </footer>
 
@@ -468,7 +470,7 @@ function dayName(key, now) {
 
 function windText(w) { return `${compass(w.dir)} ${w.wind} knots, gusting ${w.gust}`; }
 
-/* A No, with each figure and reason coloured by how serious it is and the worst reasons first. */
+/* A No or a Marginal, with each figure and reason coloured by how serious it is and the worst reasons first. */
 const sev = (n, text) => `<span class="s${n}">${text}</span>`;
 function gradedLine(w) {
   let sea = '';
@@ -575,8 +577,10 @@ function renderDays(wins, now) {
     }
 
     const label = { go: 'Good', maybe: 'Marginal', no: 'No' };
+    // No lines are coloured by severity. Marginal lines use the same line in two colours; nothing on one can reach the bold levels.
     const list = dayWins.length ? dayWins.map(w => w.status === 'no'
       ? `<li class="no w${Math.max(0, ...w.why.map(r => r.sev))}"><b>No.</b> ${gradedLine(w)}</li>` :
+      w.status === 'maybe' ? `<li class="maybe"><b>Marginal.</b> ${gradedLine(w)}</li>` :
       `<li class="${w.status}"><b>${label[w.status]}.</b> Launch ${hm(w.launch)}${w.atDawn ? ' (sunrise)' : ''}, high water ${hm(w.hw)} at ${w.h.toFixed(1)} m, back by ${hm(w.back)}${w.atDusk ? ' (dusk)' : ''}. ` +
       `${windText(w)}.${seaText(w)}${w.reasons.length ? ' ' + esc(w.reasons.join('; ')).replace(/^./, c => c.toUpperCase()) + '.' : ''}</li>`
     ).join('') : '<li class="no">High water falls in the dark.</li>';
