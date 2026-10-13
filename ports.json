@@ -1,0 +1,9 @@
+{
+  "patch": {
+    "name": "Patch, Teifi estuary",
+    "bbox": [-4.790, 52.0765, -4.604, 52.1410],
+    "cell": 10,
+    "cdBelowOdn": 2.44,
+    "lidar": "https://dmwproductionblob.blob.core.windows.net/cogs/lidar/wales_dtm_32bit_cog.tif"
+  }
+}

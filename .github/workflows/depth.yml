@@ -1,0 +1,39 @@
+# Builds depth/<port>.json from free LiDAR and EMODnet data, for the simulation map's depth layer.
+# Runs when ports.json or the builder changes, or by hand from the Actions tab (Build depth data > Run workflow).
+name: Build depth data
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ports.json
+      - build-depth.py
+      - .github/workflows/depth.yml
+permissions:
+  contents: write
+concurrency:
+  group: depth
+  cancel-in-progress: false
+jobs:
+  depth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install rasterio numpy
+      - name: Build
+        run: |
+          mkdir -p depth
+          python build-depth.py 2>&1 | tee depth/build-log.txt
+      - name: Commit
+        if: always()
+        run: |
+          git config user.name "depth-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add depth
+          git diff --cached --quiet && exit 0
+          git commit -m "Update depth data"
+          for i in 1 2 3; do git pull --rebase && git push && exit 0; sleep 5; done
+          exit 1
