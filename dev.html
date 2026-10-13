@@ -837,6 +837,7 @@ const makeRoute = pts => pts.map((p, i) => ({ x: p.x, y: p.y, clr: i ? clearance
    Without the file only the coastline is used, exactly as before. */
 const PORT = { id: 'patch' };      // a ports dropdown would set this, and with it MAPB, COAST and the waypoints
 const NAV_CLEAR = 12;              // metres a route keeps from water too shallow for the boat
+const WADE = 400;                  // the most shallow water a launch can be from deep enough water, metres
 const POLY_NAV = { grid: false, dist: landDist, shortest: polyShortest, ahead: 40, aheadMin: 20 };
 let NAV = POLY_NAV, depth = null;
 const shortest = (a, b, used) => NAV.shortest(a, b, used);
@@ -936,14 +937,40 @@ function gridNav(lo, need) {
   for (let i = 0; i < N; i++) { const b = G.v[i]; blocked[i] = b === G.noData ? poly[i] : b > lim ? 1 : 0; }
   const D = edt(blocked, G.nx, G.ny);
   for (let i = 0; i < N; i++) D[i] *= G.cm;
-  const nav = { grid: true, need, lim, D, ahead: 25, aheadMin: 8 };
+  const nav = { grid: true, need, lim, D, comp: label(D, G.nx, G.ny), ahead: 25, aheadMin: 8 };
   nav.dist = p => { const d = sample(D, p); return d == null ? landDist(p) : d; };
   nav.shortest = (a, b, used) => gridShortest(nav, a, b, used);
-  nav.snap = p => { if (nav.dist(p) >= NAV_CLEAR) return p; const i = nearestOpen(nav, p, 60); return i < 0 ? null : cellXY(i); };
+  // The open sea is whatever water joins up with the point north of Cardigan Island.
+  const sea = nearestOpen(nav, NODE.I3, 100);
+  nav.sea = sea < 0 ? 0 : nav.comp[sea];
+  // A point moved into water with room that joins the open sea, if it is not in some already.
+  nav.snap = p => {
+    const i = nearestOpen(nav, p, 100, nav.sea);
+    if (i < 0) return null;
+    return nav.dist(p) >= NAV_CLEAR && nav.comp[nearestOpen(nav, p, 1)] === nav.sea ? p : cellXY(i);
+  };
   G.cache = { key, nav };
   return nav;
 }
-function nearestOpen(nav, p, R) {  // the nearest cell with room, within R cells, or -1
+// Numbers each patch of water with room that is joined up side to side, so the planner never snaps into a pocket.
+function label(D, nx, ny) {
+  const N = nx * ny, comp = new Int32Array(N), stack = new Int32Array(N);
+  let id = 0;
+  for (let s = 0; s < N; s++) {
+    if (comp[s] || D[s] < NAV_CLEAR) continue;
+    id++; comp[s] = id;
+    let top = 0; stack[top++] = s;
+    while (top) {
+      const i = stack[--top], c = i % nx;
+      if (c > 0 && !comp[i - 1] && D[i - 1] >= NAV_CLEAR) { comp[i - 1] = id; stack[top++] = i - 1; }
+      if (c < nx - 1 && !comp[i + 1] && D[i + 1] >= NAV_CLEAR) { comp[i + 1] = id; stack[top++] = i + 1; }
+      if (i >= nx && !comp[i - nx] && D[i - nx] >= NAV_CLEAR) { comp[i - nx] = id; stack[top++] = i - nx; }
+      if (i < N - nx && !comp[i + nx] && D[i + nx] >= NAV_CLEAR) { comp[i + nx] = id; stack[top++] = i + nx; }
+    }
+  }
+  return comp;
+}
+function nearestOpen(nav, p, R, comp) {  // the nearest cell with room (in patch `comp`, if given) within R cells, or -1
   const G = depth, { c, r } = cellAt(p), c0 = Math.round(c), r0 = Math.round(r);
   let best = -1, bd = Infinity;
   for (let k = 0; k <= R; k++) {
@@ -955,7 +982,7 @@ function nearestOpen(nav, p, R) {  // the nearest cell with room, within R cells
         const cc = c0 + dc;
         if (cc < 0 || cc >= G.nx) continue;
         const i = rr * G.nx + cc;
-        if (nav.D[i] >= NAV_CLEAR) { const d = dr * dr + dc * dc; if (d < bd) { bd = d; best = i; } }
+        if (nav.D[i] >= NAV_CLEAR && (!comp || nav.comp[i] === comp)) { const d = dr * dr + dc * dc; if (d < bd) { bd = d; best = i; } }
       }
     }
     if (best >= 0 && bd <= (k + 1) * (k + 1)) break;     // no further ring can hold a closer cell
@@ -973,7 +1000,13 @@ function lineClear(nav, p, q, min) {
 const DIRS = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]];
 function gridShortest(nav, a, b, used) {
   const G = depth, nx = G.nx, ny = G.ny, D = nav.D, N = nx * ny;
-  const ia = nearestOpen(nav, a, 60), ib = nearestOpen(nav, b, 60);
+  // Both ends go to the nearest water with room that joins the other end: the open sea's if it can.
+  let ia = -1, ib = -1;
+  for (const c of [nav.sea, nav.comp[nearestOpen(nav, a, 100)], nav.comp[nearestOpen(nav, b, 100)]]) {
+    if (!c) continue;
+    ia = nearestOpen(nav, a, 100, c); ib = nearestOpen(nav, b, 100, c);
+    if (ia >= 0 && ib >= 0) break;
+  }
   if (ia < 0 || ib < 0) return null;
   let pen = null;
   if (used && used.segs && used.segs.length) {
@@ -1037,7 +1070,7 @@ function gridShortest(nav, a, b, used) {
   // The ends themselves, joined to the grid path where they are not in open water.
   const Q = [a];
   const P = cells.map(cellXY);
-  const aOpen = nav.dist(a) >= NAV_CLEAR, bOpen = nav.dist(b) >= NAV_CLEAR;
+  const aOpen = gap(a, cellXY(ia)) < depth.cm, bOpen = gap(b, cellXY(ib)) < depth.cm;
   for (let k = aOpen ? 1 : 0; k < P.length - (bOpen ? 1 : 0); k++) Q.push(P[k]);
   Q.push(b);
   const clr = Q.map(p => nav.dist(p)), out = [a];
@@ -1072,9 +1105,10 @@ function navFor(w) {
 }
 
 /* The depth layer, painted for the part of the map in view: water deep enough for the boat all through
-   the window is left blue, water too shallow at the lowest tide is chart green, and anything above the
-   high tide is land. Each pixel reads the bed between cells, so the edges stay smooth when zoomed in. */
-const SHOAL_RGBA = 0xFF9FC9B9, LAND_RGBA = 0xFFDCF1F6, NAV_RGBA = 0xFFF1E3CC;   // as 0xAABBGGRR
+   the window is blue, water too shallow at the lowest tide in it is chart green, and anything above the
+   high tide is land, with a fine line along the shore. With depths the coastline comes from here, not
+   from the rough outline. Each pixel reads the bed between cells, so edges stay smooth when zoomed in. */
+const SHOAL_RGBA = 0xFF9FC9B9, LAND_RGBA = 0xFFDCF1F6, NAV_RGBA = 0xFFF1E3CC, SHORE_RGBA = 0xFFA2CCD6;   // as 0xAABBGGRR
 function paintDepth(cv, view, nav) {
   const rc = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
   const W = Math.max(1, Math.round(rc.width * dpr)), H = Math.max(1, Math.round(rc.height * dpr));
@@ -1106,6 +1140,14 @@ function paintDepth(cv, view, nav) {
       px[o + i] = z > dry ? LAND_RGBA : z > lim ? SHOAL_RGBA : NAV_RGBA;
     }
   }
+  // The shore: land pixels with water beside them.
+  const edge = [];
+  for (let j = 1; j < H - 1; j++) for (let i = 1, o = j * W; i < W - 1; i++) {
+    if (px[o + i] !== LAND_RGBA) continue;
+    const l = px[o + i - 1], r = px[o + i + 1], u = px[o + i - W], d = px[o + i + W];
+    if ((l && l !== LAND_RGBA) || (r && r !== LAND_RGBA) || (u && u !== LAND_RGBA) || (d && d !== LAND_RGBA)) edge.push(o + i);
+  }
+  for (const k of edge) px[k] = SHORE_RGBA;
   ctx.putImageData(img, 0, 0);
 }
 
@@ -1185,8 +1227,10 @@ function simulate(wps, t0, tMax, riverKn) {
       const th = (from + tack * CLOSE) * RAD, lat = Math.sin(th) * ly - Math.cos(th) * lx;
       // Tack at the edge of the lane, which is wide in open water and narrow near land, or when the shore is close ahead.
       const room = B.clr[Math.round(Math.max(0, Math.min(1, along / L)) * (B.clr.length - 1))];
-      const edge = Math.abs(xt) > Math.max(12, Math.min(350, .42 * room)) && xt * lat > 0;
-      const shore = NAV.dist({ x: x + Math.sin(th) * NAV.ahead, y: y + Math.cos(th) * NAV.ahead }) < NAV.aheadMin;
+      const edge = Math.abs(xt) > Math.max(NAV.grid ? 5 : 12, Math.min(350, .42 * room)) && xt * lat > 0;
+      // Shallows ahead mean a tack, except while still wading out through them from the launch.
+      const shore = (!NAV.grid || NAV.dist({ x, y }) >= NAV.aheadMin) &&
+        NAV.dist({ x: x + Math.sin(th) * NAV.ahead, y: y + Math.cos(th) * NAV.ahead }) < NAV.aheadMin;
       if ((edge || shore) && t - lastTack > 20000) tack = -tack;
       hdg = from + tack * CLOSE;
     }
@@ -1321,6 +1365,8 @@ function planRoute(w) {
   const riverKn = Math.min(2, (river[w.key] || 0) / 120), tMax = w.back + 90 * MIN;
   const run = (pts, fpIndex, name) => Object.assign(simulate(makeRoute(pts), w.launch, tMax, riverKn), { pts, fpIndex, name });
   const L = site.s;
+  // With depths, the launch has to be within wading distance of water that is deep enough and joins the sea.
+  if (NAV.grid) { const st = NAV.snap(L); NAV.why = !st || gap(st, L) > WADE ? 'launch' : null; if (NAV.why) return null; }
   let r;
   if (!touched() && site.patch && !NAV.grid) {
     const a = run(WAY_OUT.concat(named(['I1', 'I2', 'I3', 'I4', 'I5', 'K', 'I6', 'S2']), WAY_HOME), WAY_OUT.length + 2, 'Round Cardigan Island');
@@ -1422,6 +1468,8 @@ function simWindow(key) {
 }
 
 function simText(r, w) {
+  if (!r && NAV.grid && NAV.why === 'launch') return `At the lowest tide in this window, ${NAV.lo.toFixed(1)} m, there is no water deep enough ` +
+    `for a ${BOATS[boatNo].name} within ${WADE} m of the launch that leads out to sea. Try a smaller boat, a bigger tide or another launch point.`;
   if (!r && NAV.grid) return `No route with enough water for a ${BOATS[boatNo].name} ${touched() ? 'through those points' : 'round the island from this launch point'} ` +
     `in this window. ${touched() ? 'Move a crosshair and press Resimulate, or' : 'Try another spot on the shore, or'} choose a smaller boat.`;
   if (!r) return touched() ? 'No clear route through those points. Move a crosshair and press Resimulate.'
@@ -1457,6 +1505,7 @@ function openSim(key, quiet) {
   btn.setAttribute('aria-expanded', 'true');
   btn.textContent = 'Resimulate';
   const S0 = site.s, plan = planRoute(w), nav = NAV;
+  const wade = nav.grid && plan ? gap(S0, nav.snap(S0) || S0) : 0;   // shallow water between the launch and enough depth
   const r = plan || { path: [{ t: w.launch, x: S0.x, y: S0.y, h: 0, s: 0 }], tacks: [], end: w.launch, dist: 0, riverKn: 0 };
   const path = r.path, n = path.length, t0 = path[0].t, total = r.end - t0;
   const pt = p => vx(p) + ',' + vy(p);
@@ -1469,7 +1518,7 @@ function openSim(key, quiet) {
     `<button type="button" class="sim-close">Close</button></span></div>` +
     `<div class="map"><canvas class="depth" aria-hidden="true"></canvas>` +
     `<svg class="chart" viewBox="0 0 ${VW} ${VH.toFixed(1)}" role="img" aria-label="Map of the Teifi estuary and Cardigan Island with the simulated route">` +
-      `<path class="land" d="${LAND.map(landPath).join(' ')}"/>` +
+      (nav.grid ? '' : `<path class="land" d="${LAND.map(landPath).join(' ')}"/>`) +
       `<path class="route ghost" d="${path.map((p, i) => (i ? 'L' : 'M') + pt(p)).join(' ')}"/><path class="route live" d=""/>` +
       r.tacks.map(k => `<circle class="tackdot" cx="${vx(k)}" cy="${vy(k)}" r="3.2"/>`).join('') +
       `<circle class="launch" cx="${vx(S0)}" cy="${vy(S0)}" r="4"/>` +
@@ -1492,6 +1541,7 @@ function openSim(key, quiet) {
     `This is a sketch of what the day allows, not a passage plan. The coastline is simplified (© OpenStreetMap contributors), ` +
     (nav.grid ? `the depths are survey data at about 10 m detail and the channel moves, ` : `no depths or sandbanks are modelled, `) +
     `and the stream and boat speeds are estimates. ` +
+    (wade > 60 ? `Leaving the launch crosses about ${Math.round(wade / 10) * 10} m of water too shallow at the lowest tide, so launch nearer high water. ` : '') +
     (nav.grid ? `<span class="key nav"></span> Deep enough for a ${esc(BOATS[boatNo].name)} all through this window. ` +
       `<span class="key shoal"></span> Too shallow at the lowest tide in it, ${nav.lo.toFixed(1)} m. Wheel or pinch to zoom. ` : '') +
     `${boatNo ? 'The simulated boat sails like a Topper whatever the boat size is set to. ' : ''}Each circle is a tack.</p>`;
