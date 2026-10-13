@@ -1,0 +1,6 @@
+--- patch: Patch, Teifi estuary
+LiDAR: 191007 x 233000 px at 1 m, EPSG:27700, float32, nodata -9999.0, overviews [2, 4, 8, 16, 32, 64]
+LiDAR window read: 2616 x 1545 px, 58% with values
+EMODnet: 198 x 81 px, EPSG:4326, values -39.8 to 203.9 m
+cells from LiDAR 59.8%, from EMODnet 40.2%, none 0.0%
+wrote depth/patch.json, 113 KB, grid 1272 x 719
