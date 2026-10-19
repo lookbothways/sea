@@ -1,35 +1,8 @@
 {
  "station": "Port Cardigan",
  "id": "0489",
- "fetched": "2026-10-18T08:08:19.102Z",
+ "fetched": "2026-10-19T09:01:42.104Z",
  "events": [
-  {
-   "EventType": "LowWater",
-   "DateTime": "2026-10-18T05:54:08.333",
-   "IsApproximateTime": false,
-   "Height": 2.2907649942093578,
-   "IsApproximateHeight": false,
-   "Filtered": false,
-   "Date": "2026-10-18T00:00:00"
-  },
-  {
-   "EventType": "HighWater",
-   "DateTime": "2026-10-18T11:50:24",
-   "IsApproximateTime": false,
-   "Height": 3.312897714366961,
-   "IsApproximateHeight": false,
-   "Filtered": false,
-   "Date": "2026-10-18T00:00:00"
-  },
-  {
-   "EventType": "LowWater",
-   "DateTime": "2026-10-18T18:32:00.95",
-   "IsApproximateTime": false,
-   "Height": 2.399713772479055,
-   "IsApproximateHeight": false,
-   "Filtered": false,
-   "Date": "2026-10-18T00:00:00"
-  },
   {
    "EventType": "HighWater",
    "DateTime": "2026-10-19T00:21:20",
@@ -236,6 +209,42 @@
    "IsApproximateHeight": false,
    "Filtered": false,
    "Date": "2026-10-24T00:00:00"
+  },
+  {
+   "EventType": "LowWater",
+   "DateTime": "2026-10-25T01:14:43.333",
+   "IsApproximateTime": false,
+   "Height": 0.9636650571041668,
+   "IsApproximateHeight": false,
+   "Filtered": false,
+   "Date": "2026-10-25T00:00:00"
+  },
+  {
+   "EventType": "HighWater",
+   "DateTime": "2026-10-25T06:37:08.2",
+   "IsApproximateTime": false,
+   "Height": 4.535710717715991,
+   "IsApproximateHeight": false,
+   "Filtered": false,
+   "Date": "2026-10-25T00:00:00"
+  },
+  {
+   "EventType": "LowWater",
+   "DateTime": "2026-10-25T13:34:05",
+   "IsApproximateTime": false,
+   "Height": 0.9482988475230414,
+   "IsApproximateHeight": false,
+   "Filtered": false,
+   "Date": "2026-10-25T00:00:00"
+  },
+  {
+   "EventType": "HighWater",
+   "DateTime": "2026-10-25T18:54:16.6",
+   "IsApproximateTime": false,
+   "Height": 4.779384155182862,
+   "IsApproximateHeight": false,
+   "Filtered": false,
+   "Date": "2026-10-25T00:00:00"
   }
  ]
 }
