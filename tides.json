@@ -1,44 +1,8 @@
 {
  "station": "Port Cardigan",
  "id": "0489",
- "fetched": "2026-10-20T08:39:50.623Z",
+ "fetched": "2026-10-21T08:40:56.658Z",
  "events": [
-  {
-   "EventType": "HighWater",
-   "DateTime": "2026-10-20T02:01:36",
-   "IsApproximateTime": false,
-   "Height": 2.848857042307788,
-   "IsApproximateHeight": false,
-   "Filtered": false,
-   "Date": "2026-10-20T00:00:00"
-  },
-  {
-   "EventType": "LowWater",
-   "DateTime": "2026-10-20T08:33:25",
-   "IsApproximateTime": false,
-   "Height": 2.597678658585669,
-   "IsApproximateHeight": false,
-   "Filtered": false,
-   "Date": "2026-10-20T00:00:00"
-  },
-  {
-   "EventType": "HighWater",
-   "DateTime": "2026-10-20T15:00:56.933",
-   "IsApproximateTime": false,
-   "Height": 3.1179704326857545,
-   "IsApproximateHeight": false,
-   "Filtered": false,
-   "Date": "2026-10-20T00:00:00"
-  },
-  {
-   "EventType": "LowWater",
-   "DateTime": "2026-10-20T21:36:03.333",
-   "IsApproximateTime": false,
-   "Height": 2.3569081872845015,
-   "IsApproximateHeight": false,
-   "Filtered": false,
-   "Date": "2026-10-20T00:00:00"
-  },
   {
    "EventType": "HighWater",
    "DateTime": "2026-10-21T03:46:39.5",
@@ -245,6 +209,42 @@
    "IsApproximateHeight": false,
    "Filtered": false,
    "Date": "2026-10-26T00:00:00"
+  },
+  {
+   "EventType": "LowWater",
+   "DateTime": "2026-10-27T02:41:16.667",
+   "IsApproximateTime": false,
+   "Height": 0.6615884965612594,
+   "IsApproximateHeight": false,
+   "Filtered": false,
+   "Date": "2026-10-27T00:00:00"
+  },
+  {
+   "EventType": "HighWater",
+   "DateTime": "2026-10-27T07:50:27.9",
+   "IsApproximateTime": false,
+   "Height": 4.899429752191933,
+   "IsApproximateHeight": false,
+   "Filtered": false,
+   "Date": "2026-10-27T00:00:00"
+  },
+  {
+   "EventType": "LowWater",
+   "DateTime": "2026-10-27T15:02:55",
+   "IsApproximateTime": false,
+   "Height": 0.6960076521313225,
+   "IsApproximateHeight": false,
+   "Filtered": false,
+   "Date": "2026-10-27T00:00:00"
+  },
+  {
+   "EventType": "HighWater",
+   "DateTime": "2026-10-27T20:10:28.05",
+   "IsApproximateTime": false,
+   "Height": 4.964601748904827,
+   "IsApproximateHeight": false,
+   "Filtered": false,
+   "Date": "2026-10-27T00:00:00"
   }
  ]
 }
