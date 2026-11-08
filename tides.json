@@ -1,44 +1,8 @@
 {
  "station": "Port Cardigan",
  "id": "0489",
- "fetched": "2026-11-07T10:22:59.189Z",
+ "fetched": "2026-11-08T10:32:23.576Z",
  "events": [
-  {
-   "EventType": "LowWater",
-   "DateTime": "2026-11-07T00:37:08.333",
-   "IsApproximateTime": false,
-   "Height": 1.152400282442544,
-   "IsApproximateHeight": false,
-   "Filtered": false,
-   "Date": "2026-11-07T00:00:00"
-  },
-  {
-   "EventType": "HighWater",
-   "DateTime": "2026-11-07T06:05:42.4",
-   "IsApproximateTime": false,
-   "Height": 4.336906740756031,
-   "IsApproximateHeight": false,
-   "Filtered": false,
-   "Date": "2026-11-07T00:00:00"
-  },
-  {
-   "EventType": "LowWater",
-   "DateTime": "2026-11-07T12:53:05",
-   "IsApproximateTime": false,
-   "Height": 1.1561508340909115,
-   "IsApproximateHeight": false,
-   "Filtered": false,
-   "Date": "2026-11-07T00:00:00"
-  },
-  {
-   "EventType": "HighWater",
-   "DateTime": "2026-11-07T18:22:51.1",
-   "IsApproximateTime": false,
-   "Height": 4.499921473613255,
-   "IsApproximateHeight": false,
-   "Filtered": false,
-   "Date": "2026-11-07T00:00:00"
-  },
   {
    "EventType": "LowWater",
    "DateTime": "2026-11-08T01:20:25",
@@ -254,6 +218,42 @@
    "IsApproximateHeight": false,
    "Filtered": false,
    "Date": "2026-11-13T00:00:00"
+  },
+  {
+   "EventType": "LowWater",
+   "DateTime": "2026-11-14T04:35:46.133",
+   "IsApproximateTime": false,
+   "Height": 1.6690954784736916,
+   "IsApproximateHeight": false,
+   "Filtered": false,
+   "Date": "2026-11-14T00:00:00"
+  },
+  {
+   "EventType": "HighWater",
+   "DateTime": "2026-11-14T09:58:24",
+   "IsApproximateTime": false,
+   "Height": 4.035079647958057,
+   "IsApproximateHeight": false,
+   "Filtered": false,
+   "Date": "2026-11-14T00:00:00"
+  },
+  {
+   "EventType": "LowWater",
+   "DateTime": "2026-11-14T16:56:26.533",
+   "IsApproximateTime": false,
+   "Height": 1.7403414151674568,
+   "IsApproximateHeight": false,
+   "Filtered": false,
+   "Date": "2026-11-14T00:00:00"
+  },
+  {
+   "EventType": "HighWater",
+   "DateTime": "2026-11-14T22:17:36",
+   "IsApproximateTime": false,
+   "Height": 3.741618048604679,
+   "IsApproximateHeight": false,
+   "Filtered": false,
+   "Date": "2026-11-14T00:00:00"
   }
  ]
 }
